@@ -1,0 +1,18 @@
+[
+  {
+    "alert_id": 1,
+    "sensor_id": 1,
+    "rule_key": "COLONY_DEATH",
+    "severity": "critical",
+    "triggered_at": "2025-10-27T19:44:17.638565Z",
+    "message": "Internal temp dropped near ambient."
+  },
+  {
+    "alert_id": 2,
+    "sensor_id": 2,
+    "rule_key": "PRE_SWARM",
+    "severity": "warning",
+    "triggered_at": "2025-10-27T09:44:17.638565Z",
+    "message": "Temp + volume spike observed."
+  }
+]
