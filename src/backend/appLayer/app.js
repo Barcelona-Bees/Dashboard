@@ -1,1 +1,0 @@
-// calls bl functions to send data to frontend

@@ -1,1 +1,0 @@
-// Functions to pull info from the database
