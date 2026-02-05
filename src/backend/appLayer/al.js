@@ -1,6 +1,9 @@
 // calls bl functions to send data to frontend
-import * as fs from 'fs/promises';
 
+const fs = require("fs/promises");
+const path = require("path");
+
+// MOCK Functions
 var hiveData = [];
 
 /**
@@ -19,6 +22,7 @@ function getMeasurement(datetime){
             return ts;
         }
     }
+    return [datetime, "0", "0"]
 }
 
 /**
@@ -43,43 +47,75 @@ function getDay(date){
 }
 
 /**
- * Gets the past two weeks of data. (hardcoded to 1/10/26 for now)
+ * Gets the past two weeks of data. (hardcoded to 1/14/26 for now)
  *  
  * @returns [[timestamp, temp, humidity], ...]
 */
-function getTwoWeeks(){
-    const currentDatetime = "2026-01-10T23:50:00";
+function getTwoWeeks() {
+    const currentDatetime = "2026-01-14T23:50:00";
     const today = new Date(currentDatetime);
-    const twoWeeks = new Date(currentDatetime);
 
-    let currentDay = today.getDate();
-    twoWeeks.setDate(currentDay - 14);
+    const TEN_MINUTES_MS = 10 * 60 * 1000;
+    const ENTRIES = 2016;
 
-    let len = hiveData.length;
-    var data = [];
+    const twoWeeks = new Date(today.getTime() - ENTRIES * TEN_MINUTES_MS);
 
-    for(let i=0; i<len; i++){
-        let timestamp = hiveData[i];
-        let ts = timestamp.split(",")[0];
-        if(ts>=twoWeeks.toISOString() && ts<=today.toISOString()){
-            let measurement = getMeasurement(ts);
-            data.push(measurement);
+    const data = [];
+
+    for (let i = 0; i < hiveData.length; i++) {
+        const tsString = hiveData[i].split(",")[0];
+        const tsDate = new Date(tsString);
+
+        // start inclusive, end exclusive
+        if (tsDate > twoWeeks && tsDate <= today) {
+            data.push(getMeasurement(tsString));
         }
     }
-    return data
+
+    return data;
 }
 
+
 async function readCSV(){
-    let data = await fs.readFile("testData/beehive_measurements.csv", 'utf-8');
+    let data;
+    if (typeof window === "undefined") {
+        // Running in Node (Jest)
+        const filePath = path.join(__dirname, "../../public/testData/beehive_measurements.csv");
+        data = await fs.readFile(filePath, "utf-8");
+    } else {
+        // Running in browser
+        const response = await fetch("/testData/beehive_measurements.csv");
+        data = await response.text();
+    }
+
     let parsedData = data.split("\r\n");
 
-    for (let i = 0; i < parsedData.length; i++) {
+    for (let i = 1; i < parsedData.length; i++) {
         hiveData.push(parsedData[i]);
         // console.log(parsedData[i]);
     }
 }
 
-await readCSV();
-console.log("getMeasurement: "+getMeasurement("2026-01-14T23:50:00"))
-console.log("getDay: "+getDay("2026-01-14").length+" timestamps");
-console.log("getTwoWeeks: "+getTwoWeeks().length+" timestamps");
+/**
+ * Initializes the data when reading from csv
+ * 
+ * Always run this before trying to access data
+ */
+async function init(){
+    await readCSV();
+}
+
+function verifyCSV(){
+    return hiveData
+}
+
+// ----------------------------------------------------------------------------------------------------------
+// REAL Functions
+
+module.exports = {
+    getTwoWeeks,
+    getDay,
+    getMeasurement,
+    init,
+    verifyCSV
+}
