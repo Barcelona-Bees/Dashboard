@@ -3,23 +3,25 @@ CREATE DATABASE BarcBees;
 USE BarcBees;
 
 CREATE TABLE Hive(
-	hiveID int PRIMARY KEY,
+	hiveID int PRIMARY KEY auto_increment,
 	name varchar(100) not null,
-    zipcode char(5) not null
+    zipcode char(5) not null,
+    startDate datetime not null,
 );
 
 CREATE TABLE User(
-    userID int PRIMARY KEY, 
+    userID int PRIMARY KEY auto_increment, 
     username varchar(20) NOT NULL,
 	password varchar(500) NOT NULL,
 	email varchar(500) NOT NULL,
     phone char(10) NULL,
+    sessionToken varchar(500) NULL,
     dataStartDate DATETIME NULL 
 );
 
 CREATE TABLE Notify(
     userID int PRIMARY KEY,
-    noteType ENUM('email','phone','both', 'none'),
+    notifType ENUM('email','phone','both', 'none'),
     temp boolean,
     humidity boolean,
     carbonDioxide boolean,
@@ -29,38 +31,47 @@ CREATE TABLE Notify(
 
 
 CREATE TABLE Temperature(
-    tempID int PRIMARY KEY,
+    tempID int PRIMARY KEY auto_increment,
+    hiveID int NOT NULL,
     timestamp DATETIME NOT NULL,
-    reading float NULL
+    reading float NULL,
+    CONSTRAINT FK_Temperature_Hive FOREIGN KEY (hiveID) references Hive(hiveID)
 );
 
 CREATE TABLE OutsideTemp(
-    oTempID int PRIMARY KEY,
+    oTempID int PRIMARY KEY auto_increment,
+    hiveID int NOT NULL,
     timestamp DATETIME NOT NULL,
-    reading float NULL
+    reading float NULL,
+    CONSTRAINT FK_OutsideTemp_Hive FOREIGN KEY (hiveID) references Hive(hiveID)
+
 );
 
 CREATE TABLE CarbonDioxide(
-    carbonDioxideID int PRIMARY KEY,
+    carbonDioxideID int PRIMARY KEY auto_increment,
+    hiveID int NOT NULL,
     timestamp DATETIME NOT NULL,
-    reading float NULL
+    reading float NULL,
+    CONSTRAINT FK_CarbonDioxide_Hive FOREIGN KEY (hiveID) references Hive(hiveID)
+
 );
 
 CREATE TABLE Humidity(
-    humidtyID int PRIMARY KEY,
+    humidtyID int PRIMARY KEY auto_increment,
     timestamp DATETIME NOT NULL,
-    reading float NULL
+    reading float NULL,
+    CONSTRAINT FK_Temperature_Hive FOREIGN KEY (hiveID) references Hive(hiveID)
 );
 
 CREATE TABLE OutsidePressure(
-    pressureID int PRIMARY KEY,
+    pressureID int PRIMARY KEY auto_increment,
     timestamp DATETIME NOT NULL,
     reading float NULL
 );
 
 
 CREATE TABLE HiveData(
-	hiveID int NOT NULL,
+	hiveID int NOT NULL ,
     timestamp DATETIME NOT NULL,
     tempID int NULL,
     humidtyID int NULL,
