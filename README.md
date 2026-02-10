@@ -1,49 +1,29 @@
-# Beehive Sensors — React PWA Starter (Vite + Tailwind + Recharts)
+# Barcelona Bees Dashboard (JS, single-page tabs) — Wireframe Match
 
-**Theme:** Orange (#ff6600) / black.  
-**Pages:** Dashboard, Alerts, Admin.  
-**Data:** Static mocks in `/public/mock` (swap to API later).
+This is a **JavaScript (JSX)** Vite + React single-page dashboard that matches the provided wireframes:
+- Home (Current Readings)
+- Notifications (Alerts)
+- All Data (Historical data + Export modal)
+- Account
 
-## Quickstart
+**Important:** Charts are currently **wireframe placeholders** (grid + sample lines) so everything renders reliably.
+When you’re ready for real data, we can swap `ChartCard.jsx` to an accessible chart library (AG Charts, etc.) in ~5 minutes.
+
+## Run it locally
+
 ```bash
-npm i
+npm install
 npm run dev
 ```
-Open http://localhost:5173
 
-## Tech
-- Vite + React + TypeScript
-- TailwindCSS (see `tailwind.config.cjs`)
-- Recharts for line charts
-- PWA: `manifest.webmanifest` + simple `sw.js` (cache-first)
+Open the URL Vite prints (usually http://localhost:5173)
 
-## Wire-up to your API
-Update `src/services/api.ts` to call your backend:
-```ts
-const BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
-const r = await fetch(`${ ' }}BASE{{ ' }/readings?sensor_id=1&since=48h`)
-```
+## Notes
+- Login is a simple local toggle (stored in localStorage) so you can click through screens.
+- Data is placeholder in `src/data/fake.js` — swap with your real fake-data file later.
+- This project is intentionally **single page with tabs** (no router).
 
-## Pages
-- **Dashboard:** last 48h temperature line chart, KPI cards
-- **Alerts:** list of open/recent alerts
-- **Admin:** device registry with battery + last seen
 
-## Folder Structure
-```
-beehive-pwa-starter/
-  public/
-    manifest.webmanifest
-    sw.js
-    mock/ (sample JSON)
-  src/
-    pages/ (Dashboard, Alerts, Admin)
-    components/
-    services/api.ts
-    styles/index.css
-  tailwind.config.cjs
-  postcss.config.cjs
-  vite.config.ts
-  tsconfig.json
-  package.json
-```
+## Gauges & charts
+- Gauges are dial-style with colored target bands + a needle.
+- Charts support hover, drag-to-scrub, and keyboard (Left/Right) to inspect points.
