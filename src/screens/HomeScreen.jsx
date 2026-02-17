@@ -1,22 +1,89 @@
+import { useState, useEffect } from "react";
 import GaugeCard from "../components/GaugeCard";
 import AlertCard from "../components/AlertCard";
 import AccessibleLineChart from "../components/AccessibleLineChart";
-import { fake } from "../data/fake";
 import { THRESHOLDS_F } from "../config/thresholds";
+import { getCurrentReading, getTwoWeeksData } from "../services/api";
+import { transformToFrontendFormat, transformTo24HourChart } from "../services/dataTransform";
+import { formatTimestamp } from "../utils/conversions";
 
 export default function HomeScreen() {
-  const r = fake.readings;
+  const [readings, setReadings] = useState(null);
+  const [chartData, setChartData] = useState([]);
+  const [updatedAt, setUpdatedAt] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Fetch current reading and chart data in parallel
+        const [current, twoWeeks] = await Promise.all([
+          getCurrentReading(),
+          getTwoWeeksData(),
+        ]);
+        
+        // Transform data
+        const frontendReadings = transformToFrontendFormat(current);
+        setReadings(frontendReadings);
+        
+        // Get last 24 hours for chart (or use all if less than 24h)
+        const last24h = twoWeeks.slice(-144); // 144 = 24 hours * 6 (10-min intervals)
+        const chart24h = transformTo24HourChart(last24h);
+        setChartData(chart24h);
+        
+        setUpdatedAt(formatTimestamp(current.timestamp));
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError('Failed to load data. Please check if the backend server is running.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchData();
+    
+    // Refresh every 5 minutes
+    const interval = setInterval(fetchData, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="page">
+        <div className="center">
+          <div className="h1">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page">
+        <div className="center">
+          <div className="h1" style={{ color: '#d64545' }}>Error</div>
+          <div className="smallMuted">{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!readings) return null;
 
   return (
     <div className="page">
       <div className="center">
         <div className="h1">Current Readings</div>
-        <div className="smallMuted">last updated: {fake.updatedAt}</div>
+        <div className="smallMuted">last updated: {updatedAt}</div>
       </div>
 
       <div className="grid2">
         <GaugeCard
-          value={r.externalTemp}
+          value={readings.externalTemp}
           label="Degrees (F)"
           sublabel="External"
           unit="°F"
@@ -27,7 +94,7 @@ export default function HomeScreen() {
         />
 
         <GaugeCard
-          value={r.internalTemp}
+          value={readings.internalTemp}
           label="Degrees (F)"
           sublabel="Internal"
           unit="°F"
@@ -38,7 +105,7 @@ export default function HomeScreen() {
         />
 
         <GaugeCard
-          value={r.co2}
+          value={readings.co2}
           label="CO2"
           unit="%"
           min={THRESHOLDS_F.co2Pct.min}
@@ -48,7 +115,7 @@ export default function HomeScreen() {
         />
 
         <GaugeCard
-          value={r.humidity}
+          value={readings.humidity}
           label="Humidity"
           unit="%"
           min={THRESHOLDS_F.humidityPct.min}
@@ -62,18 +129,18 @@ export default function HomeScreen() {
         <div className="sideStack">
           <div className="miniStatus" aria-label="Connection status">
             <small>Connection Status</small>
-            <div className="big">{r.connectionStatus}</div>
+            <div className="big">{readings.connectionStatus}</div>
           </div>
           <div className="miniStatus" style={{ marginTop: 10 }} aria-label="Package loss">
             <small>Package Loss</small>
-            <div className="big">{r.packageLoss}</div>
+            <div className="big">{readings.packageLoss}</div>
           </div>
         </div>
 
         <div className="chartFrame">
           <AccessibleLineChart
             title=""
-            data={fake.chart24h.map((p) => ({
+            data={chartData.map((p) => ({
               xLabel: p.t,
               humidity: p.humidity,
               temperature: p.temp,
@@ -88,22 +155,17 @@ export default function HomeScreen() {
         </div>
       </div>
 
+      {/* Keep alerts for now - you can add real alert logic later */}
       <div className="sectionTitle">Alerts</div>
       <div className="stack">
-        {fake.alerts.slice(0, 2).map((a) => (
-          <AlertCard
-            key={a.id}
-            type={a.type}
-            text={a.text}
-            severity={a.severity}
-            time={a.time}
-          />
-        ))}
+        <div className="smallMuted" style={{ textAlign: 'center', padding: '10px' }}>
+          No active alerts
+        </div>
       </div>
 
       <button className="statusBtn" aria-label="Connection status large">
         Connection Status
-        <div>{r.connectionStatus}</div>
+        <div>{readings.connectionStatus}</div>
       </button>
     </div>
   );
