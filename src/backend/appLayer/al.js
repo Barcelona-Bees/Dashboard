@@ -1,10 +1,24 @@
 // Application layer – Express API over hive data (calls bl functions to send data to frontend)
 
-const express = require("express");
-const fs = require("fs/promises");
-const path = require("path");
+import express from "express";
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
+
+app.use(express.json());
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+});
+
 const PORT = process.env.PORT || 3001;
 
 // MOCK data
@@ -83,10 +97,13 @@ async function readCSV() {
     "../../public/testData/beehive_measurements.csv"
   );
   const data = await fs.readFile(filePath, "utf-8");
-  const parsedData = data.split("\r\n");
+  // Handle both \r\n (Windows) and \n (Unix) line endings
+  const parsedData = data.split(/\r?\n/).filter(line => line.trim() !== '');
 
   for (let i = 1; i < parsedData.length; i++) {
-    hiveData.push(parsedData[i]);
+    if (parsedData[i].trim()) {
+      hiveData.push(parsedData[i]);
+    }
   }
 }
 
@@ -145,14 +162,23 @@ async function start() {
   });
 }
 
-if (require.main === module) {
+// Check if this is the main module by comparing normalized file paths
+const isMainModule = (() => {
+  if (!process.argv[1]) return false;
+  // Convert process.argv[1] to absolute path and normalize
+  const mainModulePath = path.resolve(process.argv[1]);
+  // Compare with current module's absolute path
+  return path.resolve(__filename) === mainModulePath;
+})();
+
+if (isMainModule) {
   start().catch((err) => {
     console.error("Failed to start:", err);
     process.exit(1);
   });
 }
 
-module.exports = {
+export {
   app,
   init,
   measurementHandler,
