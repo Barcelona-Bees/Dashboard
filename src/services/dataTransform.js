@@ -32,18 +32,34 @@ export function transformTo24HourChart(data) {
     const key = `${hour}:00`;
     
     if (!hourly[key]) {
-      hourly[key] = { temps: [], humidities: [] };
+      hourly[key] = { externalTemps: [], internalTemps: [], humidities: [] };
     }
-    hourly[key].temps.push(celsiusToFahrenheit(temperatureC));
+
+    const externalF = celsiusToFahrenheit(temperatureC);
+    // For now we only have one temperature from the backend.
+    // Use the same value for internal until a true internal sensor is wired.
+    const internalF = externalF;
+
+    hourly[key].externalTemps.push(externalF);
+    hourly[key].internalTemps.push(internalF);
     hourly[key].humidities.push(humidity);
   });
   
-  // Average and format
-  return Object.entries(hourly).map(([time, values]) => ({
-    t: time,
-    humidity: Math.round(values.humidities.reduce((a, b) => a + b, 0) / values.humidities.length),
-    temp: Math.round(values.temps.reduce((a, b) => a + b, 0) / values.temps.length),
-  }));
+  // Average and format, sorted by hour
+  return Object.entries(hourly)
+    .sort(([a], [b]) => parseInt(a, 10) - parseInt(b, 10))
+    .map(([time, values]) => ({
+      t: time,
+      humidity: Math.round(
+        values.humidities.reduce((a, b) => a + b, 0) / values.humidities.length
+      ),
+      externalTempF: Math.round(
+        values.externalTemps.reduce((a, b) => a + b, 0) / values.externalTemps.length
+      ),
+      internalTempF: Math.round(
+        values.internalTemps.reduce((a, b) => a + b, 0) / values.internalTemps.length
+      ),
+    }));
 }
 
 /**
