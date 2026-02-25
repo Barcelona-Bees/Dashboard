@@ -1,15 +1,22 @@
 import { useState, useEffect } from "react";
 import GaugeCard from "../components/GaugeCard";
-import AlertCard from "../components/AlertCard";
 import AccessibleLineChart from "../components/AccessibleLineChart";
 import { THRESHOLDS_F } from "../config/thresholds";
 import { getCurrentReading, getTwoWeeksData } from "../services/api";
 import { transformToFrontendFormat, transformTo24HourChart } from "../services/dataTransform";
-import { formatTimestamp } from "../utils/conversions";
+import { formatTimestamp, celsiusToFahrenheit } from "../utils/conversions";
+import {
+  getHourlyOutsideTempsByDate,
+  buildExternalTempFMapForDate,
+  getSyntheticExternalTempF,
+} from "../services/weather";
 
 export default function HomeScreen() {
   const [readings, setReadings] = useState(null);
   const [chartData, setChartData] = useState([]);
+  const [chartDateStr, setChartDateStr] = useState(null); // YYYY-MM-DD for weather alignment
+  const [externalTempByHour, setExternalTempByHour] = useState(null); // { "0:00": 45, ... } in °F, or null if using synthetic
+  const [currentOutsideTempF, setCurrentOutsideTempF] = useState(null); // single value for hero when we have weather
   const [updatedAt, setUpdatedAt] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -19,34 +26,62 @@ export default function HomeScreen() {
       try {
         setLoading(true);
         setError(null);
-        
-        // Fetch current reading and chart data in parallel
+
         const [current, twoWeeks] = await Promise.all([
           getCurrentReading(),
           getTwoWeeksData(),
         ]);
-        
-        // Transform data
+
         const frontendReadings = transformToFrontendFormat(current);
         setReadings(frontendReadings);
-        
-        // Get last 24 hours for chart (or use all if less than 24h)
-        const last24h = twoWeeks.slice(-144); // 144 = 24 hours * 6 (10-min intervals)
+
+        const last24h = twoWeeks.slice(-144);
         const chart24h = transformTo24HourChart(last24h);
         setChartData(chart24h);
-        
+
+        const dateStr =
+          last24h.length > 0
+            ? new Date(last24h[last24h.length - 1].timestamp).toISOString().split("T")[0]
+            : null;
+        setChartDateStr(dateStr);
+
+        try {
+          const weatherMap = await getHourlyOutsideTempsByDate();
+          const forDate = buildExternalTempFMapForDate(dateStr, weatherMap, celsiusToFahrenheit);
+          const hasWeather = Object.keys(forDate).length > 0;
+          setExternalTempByHour(hasWeather ? forDate : null);
+
+          if (hasWeather) {
+            const now = new Date();
+            const todayStr = now.toISOString().split("T")[0];
+            const hourLabel = `${now.getHours()}:00`;
+            const forCurrentHour = dateStr === todayStr ? forDate[hourLabel] : null;
+            const fallbackHour = (() => {
+              const hours = Object.keys(forDate).map((k) => parseInt(k.split(":")[0], 10)).filter((n) => !Number.isNaN(n));
+              const maxH = hours.length ? Math.max(...hours) : 23;
+              return forDate[`${maxH}:00`];
+            })();
+            setCurrentOutsideTempF(forCurrentHour != null ? forCurrentHour : fallbackHour);
+          } else {
+            setCurrentOutsideTempF(null);
+          }
+        } catch (weatherErr) {
+          console.warn("Outside temp from weather API unavailable, using estimate:", weatherErr);
+          setExternalTempByHour(null);
+          setCurrentOutsideTempF(null);
+        }
+
         setUpdatedAt(formatTimestamp(current.timestamp));
       } catch (err) {
-        console.error('Error fetching data:', err);
-        setError('Failed to load data. Please check if the backend server is running.');
+        console.error("Error fetching data:", err);
+        setError("Failed to load data. Please check if the backend server is running.");
       } finally {
         setLoading(false);
       }
     }
-    
+
     fetchData();
-    
-    // Refresh every 5 minutes
+
     const interval = setInterval(fetchData, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
@@ -81,27 +116,33 @@ export default function HomeScreen() {
         <div className="smallMuted">last updated: {updatedAt}</div>
       </div>
 
+      <div className="heroRow">
+        <div className="heroMetric">
+          <div className="heroMetricLabel">Outside temperature</div>
+          <div className="heroMetricValue">
+            {(currentOutsideTempF != null
+              ? currentOutsideTempF
+              : getSyntheticExternalTempF(readings.internalTemp, new Date().getHours())
+            ).toFixed(1)}°F
+          </div>
+        </div>
+        <div className="heroMetric">
+          <div className="heroMetricLabel">Inside hive temperature</div>
+          <div className="heroMetricValue">
+            {readings.internalTemp.toFixed(1)}°F
+          </div>
+        </div>
+      </div>
+
       <div className="grid2">
         <GaugeCard
-          value={readings.externalTemp}
-          label="Degrees (F)"
-          sublabel="External"
-          unit="°F"
-          min={THRESHOLDS_F.externalTempF.min}
-          max={THRESHOLDS_F.externalTempF.max}
-          ranges={THRESHOLDS_F.externalTempF.ranges}
-          decimals={2}
-        />
-
-        <GaugeCard
-          value={readings.internalTemp}
-          label="Degrees (F)"
-          sublabel="Internal"
-          unit="°F"
-          min={THRESHOLDS_F.internalTempF.min}
-          max={THRESHOLDS_F.internalTempF.max}
-          ranges={THRESHOLDS_F.internalTempF.ranges}
-          decimals={2}
+          value={readings.humidity}
+          label="Humidity"
+          unit="%"
+          min={THRESHOLDS_F.humidityPct.min}
+          max={THRESHOLDS_F.humidityPct.max}
+          ranges={THRESHOLDS_F.humidityPct.ranges}
+          decimals={0}
         />
 
         <GaugeCard
@@ -112,16 +153,6 @@ export default function HomeScreen() {
           max={THRESHOLDS_F.co2Pct.max}
           ranges={THRESHOLDS_F.co2Pct.ranges}
           decimals={2}
-        />
-
-        <GaugeCard
-          value={readings.humidity}
-          label="Humidity"
-          unit="%"
-          min={THRESHOLDS_F.humidityPct.min}
-          max={THRESHOLDS_F.humidityPct.max}
-          ranges={THRESHOLDS_F.humidityPct.ranges}
-          decimals={0}
         />
       </div>
 
@@ -139,19 +170,30 @@ export default function HomeScreen() {
 
         <div className="chartFrame">
           <AccessibleLineChart
-            title=""
-            data={chartData.map((p) => ({
-              xLabel: p.t,
-              humidity: p.humidity,
-              temperature: p.temp,
-            }))}
+            title="Inside vs outside temperature (last 24 hours)"
+            data={chartData.map((p, i) => {
+              const externalF =
+                externalTempByHour != null && externalTempByHour[p.t] != null
+                  ? externalTempByHour[p.t]
+                  : getSyntheticExternalTempF(p.internalTempF, i);
+              return {
+                xLabel: p.t,
+                internalTemp: p.internalTempF,
+                externalTemp: externalF,
+              };
+            })}
             xLabelKey="xLabel"
             series={[
-              { key: "humidity", name: "Humidity (%)" },
-              { key: "temperature", name: "Temperature (°F)" },
+              { key: "internalTemp", name: "Inside hive (°F)" },
+              { key: "externalTemp", name: "Outside (°F)" },
             ]}
           />
-          <div className="chartCaption">Time (24-hour system)</div>
+          <div className="chartCaption">
+            Time of day (24-hour clock).
+            {externalTempByHour != null
+              ? " Outside temperature from weather (Open-Meteo)."
+              : " Outside temperature estimated (no weather data for this date)."}
+          </div>
         </div>
       </div>
 
