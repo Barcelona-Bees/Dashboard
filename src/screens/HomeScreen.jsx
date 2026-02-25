@@ -100,7 +100,7 @@ export default function HomeScreen() {
     return (
       <div className="page">
         <div className="center">
-          <div className="h1" style={{ color: '#d64545' }}>Error</div>
+          <div className="h1" style={{ color: 'var(--danger)' }}>Error</div>
           <div className="smallMuted">{error}</div>
         </div>
       </div>
@@ -156,18 +156,26 @@ export default function HomeScreen() {
         />
       </div>
 
-      <div className="desktopRow">
-        <div className="sideStack">
-          <div className="miniStatus" aria-label="Connection status">
-            <small>Connection Status</small>
-            <div className="big">{readings.connectionStatus}</div>
+      <section className="pageSection" aria-labelledby="hardware-heading">
+        <h2 id="hardware-heading" className="pageSectionTitle">Hardware info</h2>
+        <div className="hardwareInfoRow">
+          <div className="hardwareInfoCard" aria-label="Connection status">
+            <span className="hardwareInfoLabel">Connection</span>
+            <span className="hardwareInfoValue">{readings.connectionStatus}</span>
           </div>
-          <div className="miniStatus" style={{ marginTop: 10 }} aria-label="Package loss">
-            <small>Package Loss</small>
-            <div className="big">{readings.packageLoss}</div>
+          <div className="hardwareInfoCard" aria-label="Package loss">
+            <span className="hardwareInfoLabel">Package loss</span>
+            <span className="hardwareInfoValue">{readings.packageLoss}</span>
+          </div>
+          <div className="hardwareInfoCard" aria-label="Battery level">
+            <span className="hardwareInfoLabel">Battery</span>
+            <span className="hardwareInfoValue">{readings.batteryPct}%</span>
           </div>
         </div>
+      </section>
 
+      <section className="pageSection" aria-labelledby="chart-heading">
+        <h2 id="chart-heading" className="pageSectionTitle">Temperature comparison</h2>
         <div className="chartFrame">
           <AccessibleLineChart
             title="Inside vs outside temperature (last 24 hours)"
@@ -195,20 +203,16 @@ export default function HomeScreen() {
               : " Outside temperature estimated (no weather data for this date)."}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Keep alerts for now - you can add real alert logic later */}
-      <div className="sectionTitle">Alerts</div>
-      <div className="stack">
-        <div className="smallMuted" style={{ textAlign: 'center', padding: '10px' }}>
-          No active alerts
+      <section className="pageSection" aria-labelledby="alerts-heading">
+        <h2 id="alerts-heading" className="pageSectionTitle">Alerts</h2>
+        <div className="stack">
+          <div className="emptyState">
+            No active alerts — hive looks healthy
+          </div>
         </div>
-      </div>
-
-      <button className="statusBtn" aria-label="Connection status large">
-        Connection Status
-        <div>{readings.connectionStatus}</div>
-      </button>
+      </section>
     </div>
   );
 }
