@@ -108,7 +108,7 @@ export default function AccessibleLineChart(props) {
     setActive(nearestIndex(xs, x));
   };
 
-  const seriesColors = ["rgb(40, 120, 200)", "rgb(220, 80, 60)"];
+  const seriesColors = ["#4f46e5", "#f59e0b"];
 
   return (
     <div style={{ userSelect: "none" }}>
@@ -237,7 +237,7 @@ export default function AccessibleLineChart(props) {
       </svg>
 
       {/* Always-visible readout */}
-      <div style={{ fontSize: 12, color: "#333", marginTop: 6, textAlign: "center" }}>
+      <div className="chartReadout">
         <strong>{activeLabel}</strong> — {activeText}
       </div>
     </div>

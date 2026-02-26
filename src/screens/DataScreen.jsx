@@ -75,7 +75,7 @@ export default function DataScreen({ onOpenExport }) {
     return (
       <div className="page">
         <div className="center">
-          <div className="h1" style={{ color: '#d64545' }}>Error</div>
+          <div className="h1" style={{ color: 'var(--danger)' }}>Error</div>
           <div className="smallMuted">{error}</div>
         </div>
       </div>
@@ -86,7 +86,7 @@ export default function DataScreen({ onOpenExport }) {
     <div className="page">
       <div className="dataTopRow">
         <div className="center" style={{ flex: 1 }}>
-          <div className="h1" style={{ fontSize: 18 }}>Historical data</div>
+          <div className="h1" style={{ fontSize: 18 }}>2-week overview</div>
           <div className="smallMuted">last updated: {updatedAt}</div>
         </div>
         <button className="exportBtn" onClick={onOpenExport}>Export</button>

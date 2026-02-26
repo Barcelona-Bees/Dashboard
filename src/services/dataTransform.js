@@ -14,6 +14,7 @@ export function transformToFrontendFormat(apiData, connectionStatus = 'Stable') 
     humidity: apiData.humidity,
     connectionStatus,
     packageLoss: '< 1%', // TODO: Calculate from actual data
+    batteryPct: apiData.batteryPct ?? 87, // TODO: Replace when sensor reports battery
   };
 }
 
