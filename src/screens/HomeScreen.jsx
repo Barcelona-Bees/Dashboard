@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
 import GaugeCard from "../components/GaugeCard";
 import AccessibleLineChart from "../components/AccessibleLineChart";
+import AlertCard from "../components/AlertCard";
+import { HomeSkeleton } from "../components/Skeleton";
 import { THRESHOLDS_F } from "../config/thresholds";
 import { getCurrentReading, getTwoWeeksData } from "../services/api";
+import { computeAlerts } from "../services/alerts";
 import { transformToFrontendFormat, transformTo24HourChart } from "../services/dataTransform";
 import { formatTimestamp, celsiusToFahrenheit } from "../utils/conversions";
 import {
@@ -87,13 +90,7 @@ export default function HomeScreen() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="page">
-        <div className="center">
-          <div className="h1">Loading...</div>
-        </div>
-      </div>
-    );
+    return <HomeSkeleton />;
   }
 
   if (error) {
@@ -208,9 +205,21 @@ export default function HomeScreen() {
       <section className="pageSection" aria-labelledby="alerts-heading">
         <h2 id="alerts-heading" className="pageSectionTitle">Alerts</h2>
         <div className="stack">
-          <div className="emptyState">
-            No active alerts — hive looks healthy
-          </div>
+          {computeAlerts(readings).length === 0 ? (
+            <div className="emptyState">
+              No active alerts — hive looks healthy
+            </div>
+          ) : (
+            computeAlerts(readings).map((a) => (
+              <AlertCard
+                key={a.id}
+                type={a.type}
+                text={a.text}
+                severity={a.severity}
+                time={a.time}
+              />
+            ))
+          )}
         </div>
       </section>
     </div>

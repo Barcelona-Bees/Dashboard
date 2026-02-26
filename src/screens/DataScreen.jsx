@@ -1,4 +1,5 @@
 import Modal from "../ui/Modal";
+import { DataSkeleton } from "../components/Skeleton";
 import { useState, useEffect } from "react";
 import AccessibleLineChart from "../components/AccessibleLineChart";
 import { getTwoWeeksData } from "../services/api";
@@ -61,14 +62,7 @@ export default function DataScreen({ onOpenExport }) {
   }, []);
 
   if (loading) {
-    return (
-      <div className="page">
-        <div className="center">
-          <div className="h1">Loading...</div>
-          <div className="smallMuted">Fetching historical data...</div>
-        </div>
-      </div>
-    );
+    return <DataSkeleton />;
   }
 
   if (error) {
@@ -82,6 +76,8 @@ export default function DataScreen({ onOpenExport }) {
     );
   }
 
+  const hasData = seriesData.length > 0;
+
   return (
     <div className="page">
       <div className="dataTopRow">
@@ -89,9 +85,14 @@ export default function DataScreen({ onOpenExport }) {
           <div className="h1" style={{ fontSize: 18 }}>2-week overview</div>
           <div className="smallMuted">last updated: {updatedAt}</div>
         </div>
-        <button className="exportBtn" onClick={onOpenExport}>Export</button>
+        <button className="exportBtn" onClick={onOpenExport} disabled={!hasData}>Export</button>
       </div>
 
+      {!hasData ? (
+        <div className="emptyState" style={{ marginTop: 24 }}>
+          No historical data yet. Data will appear once the sensor starts reporting.
+        </div>
+      ) : (
       <div className="dataGrid">
         <div className="chartFrame">
           <AccessibleLineChart
@@ -129,6 +130,7 @@ export default function DataScreen({ onOpenExport }) {
           />
         </div>
       </div>
+      )}
     </div>
   );
 }
