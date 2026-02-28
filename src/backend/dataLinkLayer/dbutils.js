@@ -1,11 +1,12 @@
-const { Client } = require('pg');
-const { param } = require('../routes/auth');
+// const { Client } = require('pg');
+import { Client} from 'pg';
+// const { param } = require('../routes/auth');
       
 const client = new Client({
   host: 'localhost',
-  database: 'barcbees',
-  user: 'postgres',
-  password: 'notshowing',
+  database: 'siteinfo',
+  user: 'student',
+  password: 'student',
   port: 5432,
 });
 
@@ -32,20 +33,23 @@ client.connect();
  * @param {*} criteria the table constraints
  * @returns 
  */
-async function getData( table, columns = `*`, criteria ) {
+async function getData( table, columns = `*`, criteria = null) {
     try {
         const qryColumns  = columns.join(),
           critList = [],
           paramList = [];
 
+        if(criteria != null){
           let tempIndex = 1;  
 
-        Object.entries( criteria ).forEach( ( crit ) => {
-          critList.push( `${crit[0]} = $${tempIndex}` );
-          paramList.push(crit[1]);
-          tempIndex++; //increment tempIndex
-        });
-        
+          Object.entries( criteria ).forEach( ( crit ) => {
+            critList.push( `${crit[0]} = $${tempIndex}` );
+            paramList.push(crit[1]);
+            tempIndex++; //increment tempIndex
+          });
+          
+        }
+          
         const qryCriteria = ( critList.length ) ? `WHERE ${ critList.join( ` AND ` ) }` : ``,
               qryString = `SELECT ${ qryColumns } FROM ${ table } ${ qryCriteria }`;
         console.log( qryString );
@@ -243,7 +247,7 @@ async function getDataMulti( table, columns = `*`, criteria ) {
  * @param {*} sql the sql string
  * @returns 
  */
-async function runDirectSQL(sql){
+export async function runDirectSQL(sql){
   return await client.query( sql );
 }
 
@@ -289,13 +293,13 @@ async function rollbackTransaction(){
   return await client.query('ROLLBACK');
 }
 
-module.exports = {
+export {
     // connectClient,
     // disconnectClient,
     getData,
     insertData,
     updateData,
-    runDirectSQL,
+    // runDirectSQL,
     runDirectSQLwithPrepared,
     startTransaction,
     rollbackTransaction,
