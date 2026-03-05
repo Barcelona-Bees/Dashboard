@@ -67,3 +67,46 @@ async function insertData(){
 }
 // insertData();
 
+/**
+ * Inserts a Temperature reading
+ * 
+ * @param {*} hiveID - the hiveID
+ * @param {*} reading - the reading of the temperature
+ * @param {*} timestamp - timestamp of the reading
+ */
+async function insertTemp(hiveID, reading, timestamp){
+   
+    await dbutils.insertData('Temperature',{hiveID:hiveID, reading: reading, timestamp : timestamp});
+
+}
+
+/**
+ * Gets the last temperature for the Hive
+ * 
+ */
+async function getLastTemp(){
+    let sqlString = "SELECT * FROM TEMPERATURE WHERE HIVEID = 1 AND tempid = (SELECT MAX(tempid) from Temperature where HIVEID = 1);";
+    let rJSON = await dbutils.runDirectSQL(sqlString);
+
+    console.log(rJSON.rows[0]);
+}
+
+/**
+ * Returns the temperatures between the startDate and endDate for given hiveID
+ * 
+ * 
+ * @param {*} hiveID - the hiveID
+ * @param {*} startDate - the starting date to look for
+ * @param {*} endDate - the ending date to look for
+ */
+async function getCustomRange(hiveID, startDate, endDate){
+    let sqlString = "SELECT (timestamp, reading) FROM Temperature WHERE hiveID = $1 AND timestamp BETWEEN $2 AND $3 ;";
+    let paramsArray = [hiveID, startDate, endDate];
+    let rJson = await dbutils.runDirectSQLwithPrepared(sqlString, paramsArray );
+
+    console.log (rJson);
+}
+
+// await getLastTemp();
+// insertTemp();
+await getCustomRange(1,'2026-02-01','2026-03-06');
