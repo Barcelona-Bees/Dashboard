@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
 import GaugeCard from "../components/GaugeCard";
 import AccessibleLineChart from "../components/AccessibleLineChart";
+import AlertCard from "../components/AlertCard";
+import { HomeSkeleton } from "../components/Skeleton";
 import { THRESHOLDS_F } from "../config/thresholds";
 import { getCurrentReading, getTwoWeeksData } from "../services/api";
+import { computeAlerts } from "../services/alerts";
 import { transformToFrontendFormat, transformTo24HourChart } from "../services/dataTransform";
 import { formatTimestamp, celsiusToFahrenheit } from "../utils/conversions";
 import {
@@ -47,19 +50,26 @@ export default function HomeScreen() {
 
         try {
           const weatherMap = await getHourlyOutsideTempsByDate();
-          const forDate = buildExternalTempFMapForDate(dateStr, weatherMap, celsiusToFahrenheit);
-          const hasWeather = Object.keys(forDate).length > 0;
-          setExternalTempByHour(hasWeather ? forDate : null);
+          const now = new Date();
+          const todayStr = now.toISOString().split("T")[0];
+          const hourLabel = `${now.getHours()}:00`;
 
-          if (hasWeather) {
-            const now = new Date();
-            const todayStr = now.toISOString().split("T")[0];
-            const hourLabel = `${now.getHours()}:00`;
-            const forCurrentHour = dateStr === todayStr ? forDate[hourLabel] : null;
+          // Outside temps should reflect *current* Rochester weather whenever available,
+          // even if backend chart data is from an older date.
+          const forToday = buildExternalTempFMapForDate(todayStr, weatherMap, celsiusToFahrenheit);
+          const hasTodayWeather = Object.keys(forToday).length > 0;
+
+          // Chart outside line: use today's Rochester hourly temps (keys match "0:00".."23:00").
+          setExternalTempByHour(hasTodayWeather ? forToday : null);
+
+          if (hasTodayWeather) {
+            const forCurrentHour = forToday[hourLabel];
             const fallbackHour = (() => {
-              const hours = Object.keys(forDate).map((k) => parseInt(k.split(":")[0], 10)).filter((n) => !Number.isNaN(n));
+              const hours = Object.keys(forToday)
+                .map((k) => parseInt(k.split(":")[0], 10))
+                .filter((n) => !Number.isNaN(n));
               const maxH = hours.length ? Math.max(...hours) : 23;
-              return forDate[`${maxH}:00`];
+              return forToday[`${maxH}:00`];
             })();
             setCurrentOutsideTempF(forCurrentHour != null ? forCurrentHour : fallbackHour);
           } else {
@@ -87,13 +97,7 @@ export default function HomeScreen() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="page">
-        <div className="center">
-          <div className="h1">Loading...</div>
-        </div>
-      </div>
-    );
+    return <HomeSkeleton />;
   }
 
   if (error) {
@@ -208,9 +212,21 @@ export default function HomeScreen() {
       <section className="pageSection" aria-labelledby="alerts-heading">
         <h2 id="alerts-heading" className="pageSectionTitle">Alerts</h2>
         <div className="stack">
-          <div className="emptyState">
-            No active alerts — hive looks healthy
-          </div>
+          {computeAlerts(readings).length === 0 ? (
+            <div className="emptyState">
+              No active alerts — hive looks healthy
+            </div>
+          ) : (
+            computeAlerts(readings).map((a) => (
+              <AlertCard
+                key={a.id}
+                type={a.type}
+                text={a.text}
+                severity={a.severity}
+                time={a.time}
+              />
+            ))
+          )}
         </div>
       </section>
     </div>

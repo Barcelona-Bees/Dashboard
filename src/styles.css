@@ -25,6 +25,28 @@
   --shadow-lg: 0 10px 40px rgba(28, 25, 23, 0.12);
 }
 
+/* ── Dark theme: applied when data-theme="dark" on <html> ─── */
+[data-theme="dark"] {
+  --bg-page: #0f172a;
+  --surface-main: #1e293b;
+  --surface-alt: #334155;
+  --surface-warm: #422006;
+  --primary: #818cf8;
+  --primary-hover: #a5b4fc;
+  --accent: #fbbf24;
+  --accent-muted: #451a03;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --border: #475569;
+  --border-muted: #64748b;
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -122,6 +144,68 @@ button, input, select { font: inherit; }
   background: var(--surface-alt); border-radius: var(--radius-lg);
   padding: 16px; box-shadow: var(--shadow-sm); border: 1px solid var(--border);
 }
+
+/* GaugeCard: value + range bar, WCAG meter pattern */
+.gaugeCard {
+  background: var(--surface-alt);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+}
+.gaugeCardValue {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.gaugeCardLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.gaugeBar {
+  margin-top: 14px;
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  overflow: visible;
+}
+.gaugeBarTrack {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.gaugeBarSegment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  height: 100%;
+  transition: opacity 0.15s;
+}
+.gaugeBarMarker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-main);
+  box-shadow: var(--shadow-sm);
+  z-index: 1;
+}
+.gaugeCardStatus {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.gaugeCardStatus[data-status="green"] { color: var(--success); }
+.gaugeCardStatus[data-status="yellow"] { color: var(--warning); }
+.gaugeCardStatus[data-status="red"] { color: var(--danger); }
+
 .gaugeValue { font-weight: 800; font-size: 20px; margin-top: 8px; color: var(--text); }
 .gaugeLabel, .gaugeSub { font-size: 13px; margin-top: 2px; color: var(--text-muted); }
 
@@ -185,6 +269,8 @@ button, input, select { font: inherit; }
   transition: background .15s, border-color .15s;
 }
 .exportBtn:hover { background: var(--surface-alt); border-color: var(--primary); color: var(--primary); }
+.exportBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+.exportBtn:disabled:hover { background: var(--surface-main); border-color: var(--border-muted); color: var(--text-muted); }
 .dataGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
 @media (max-width: 640px) { .dataGrid { grid-template-columns: 1fr; } }
 
@@ -277,6 +363,17 @@ button, input, select { font: inherit; }
 }
 .toggle.on { background: var(--primary); }
 .toggle.on::after { transform: translateX(20px); }
+.themeToggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.themeToggleRow .toggle { cursor: pointer; }
+.themeToggleLabel { font-size: 14px; font-weight: 600; color: var(--text); }
 
 .statsRow { display: flex; gap: 12px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
 .statBox {
@@ -298,6 +395,17 @@ button, input, select { font: inherit; }
 .pageSection { margin-top: 24px; }
 .pageSectionTitle { font-weight: 700; font-size: 14px; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 0.02em; text-transform: uppercase; }
 .emptyState { text-align: center; padding: 20px; color: var(--text-muted); font-size: 14px; }
+
+/* Skeletons: pulse animation for loading placeholders */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-alt) 25%, var(--border) 50%, var(--surface-alt) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%, 100% { background-position: 200% 0; }
+  50% { background-position: -200% 0; }
+}
 
 :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 svg:focus { outline: 3px solid var(--primary); outline-offset: 2px; border-radius: var(--radius-sm); }
