@@ -36,10 +36,10 @@ function valueToAngle(v, min, max, startAngle, endAngle) {
 }
 
 function colorHex(name) {
-  if (name === "green") return "#2f9e5f";
-  if (name === "yellow") return "#f3d86b";
-  if (name === "red") return "#d64545";
-  return "#999";
+  if (name === "green") return "#059669";
+  if (name === "yellow") return "#f59e0b";
+  if (name === "red") return "#dc2626";
+  return "#94a3b8";
 }
 
 function statusForValue(v, ranges) {

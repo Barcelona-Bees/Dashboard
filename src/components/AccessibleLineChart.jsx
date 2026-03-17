@@ -37,9 +37,16 @@ export default function AccessibleLineChart(props) {
     height = 180,
   } = props;
 
-  const w = 520;
-  const h = height;
   const pad = 24;
+  const leftAxisWidth = 40;
+  const plotWidth = 520 - leftAxisWidth - pad; // right pad
+  const w = 520 + leftAxisWidth;
+  const h = height;
+  const plotLeft = leftAxisWidth;
+  const plotRight = leftAxisWidth + plotWidth;
+  const plotTop = pad;
+  const plotBottom = h - pad;
+  const plotHeight = plotBottom - plotTop;
 
   const [active, setActive] = useState(0);
   const svgRef = useRef(null);
@@ -58,13 +65,26 @@ export default function AccessibleLineChart(props) {
 
   const xs = useMemo(() => {
     const n = data.length;
-    return data.map((_, i) => pad + (i * (w - pad * 2)) / Math.max(1, n - 1));
-  }, [data.length]);
+    return data.map((_, i) => plotLeft + (i * plotWidth) / Math.max(1, n - 1));
+  }, [data.length, plotLeft, plotWidth]);
 
   const yFor = (val) => {
     const t = (val - yMin) / ySpan;
-    return (h - pad) - t * (h - pad * 2);
+    return plotBottom - t * plotHeight;
   };
+
+  const yTicks = useMemo(() => {
+    const span = yMax - yMin;
+    const step = span <= 2 ? 0.5 : span <= 10 ? 2 : span <= 25 ? 5 : 10;
+    const low = Math.floor(yMin / step) * step;
+    const high = Math.ceil(yMax / step) * step;
+    const ticks = [];
+    for (let v = low; v <= high; v += step) {
+      if (v >= yMin - 0.01 && v <= yMax + 0.01) ticks.push(v);
+    }
+    if (ticks.length < 2) ticks.push(yMin, yMax);
+    return ticks.sort((a, b) => a - b);
+  }, [yMin, yMax]);
 
   const paths = useMemo(() => {
     return series.map((s) => {
@@ -88,8 +108,40 @@ export default function AccessibleLineChart(props) {
     setActive(nearestIndex(xs, x));
   };
 
+  const seriesColors = ["#4f46e5", "#f59e0b"];
+
   return (
     <div style={{ userSelect: "none" }}>
+      {/* Legend */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "16px",
+          marginBottom: 8,
+          fontSize: 12,
+          fontWeight: 600,
+        }}
+        role="list"
+        aria-label="Chart series"
+      >
+        {series.map((s, idx) => (
+          <div key={s.key} style={{ display: "flex", alignItems: "center", gap: 6 }} role="listitem">
+            <span
+              style={{
+                display: "inline-block",
+                width: 16,
+                height: 3,
+                backgroundColor: seriesColors[idx % seriesColors.length],
+                borderRadius: 1,
+              }}
+              aria-hidden
+            />
+            <span>{s.name}</span>
+          </div>
+        ))}
+      </div>
+
       <svg
         ref={svgRef}
         width="100%"
@@ -108,25 +160,42 @@ export default function AccessibleLineChart(props) {
         }}
         onMouseMove={(e) => onPointer(e.clientX)}
       >
-        {/* Grid */}
-        {Array.from({ length: 9 }).map((_, i) => (
-          <line
-            key={"h" + i}
-            x1="0"
-            y1={10 + i * 18}
-            x2={w}
-            y2={10 + i * 18}
-            stroke="rgba(0,0,0,0.08)"
-          />
-        ))}
+        {/* Y-axis tick labels */}
+        {yTicks.map((val) => {
+          const y = yFor(val);
+          return (
+            <g key={val}>
+              <line
+                x1={plotLeft}
+                y1={y}
+                x2={plotRight}
+                y2={y}
+                stroke="rgba(0,0,0,0.08)"
+                strokeDasharray="2 2"
+              />
+              <text
+                x={plotLeft - 6}
+                y={y}
+                textAnchor="end"
+                dominantBaseline="middle"
+                fontSize="10"
+                fill="#555"
+              >
+                {Number.isInteger(val) ? val : val.toFixed(1)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Vertical grid lines */}
         {Array.from({ length: 11 }).map((_, i) => (
           <line
             key={"v" + i}
-            x1={i * 52}
-            y1="0"
-            x2={i * 52}
-            y2={h}
-            stroke="rgba(0,0,0,0.08)"
+            x1={plotLeft + (i * plotWidth) / 10}
+            y1={plotTop}
+            x2={plotLeft + (i * plotWidth) / 10}
+            y2={plotBottom}
+            stroke="rgba(0,0,0,0.06)"
           />
         ))}
 
@@ -135,7 +204,7 @@ export default function AccessibleLineChart(props) {
           <polyline
             key={p.key}
             fill="none"
-            stroke={idx === 0 ? "rgb(40, 120, 200)" : "rgb(220, 80, 60)"}
+            stroke={seriesColors[idx % seriesColors.length]}
             strokeWidth="2.5"
             points={p.pts}
           />
@@ -144,9 +213,9 @@ export default function AccessibleLineChart(props) {
         {/* Active vertical line */}
         <line
           x1={activeX}
-          y1={pad - 6}
+          y1={plotTop - 6}
           x2={activeX}
-          y2={h - pad + 6}
+          y2={plotBottom + 6}
           stroke="rgba(0,0,0,0.25)"
         />
 
@@ -159,7 +228,7 @@ export default function AccessibleLineChart(props) {
               cx={activeX}
               cy={y}
               r="4.5"
-              fill={idx === 0 ? "rgb(40, 120, 200)" : "rgb(220, 80, 60)"}
+              fill={seriesColors[idx % seriesColors.length]}
               stroke="#fff"
               strokeWidth="2"
             />
@@ -168,7 +237,7 @@ export default function AccessibleLineChart(props) {
       </svg>
 
       {/* Always-visible readout */}
-      <div style={{ fontSize: 12, color: "#333", marginTop: 6, textAlign: "center" }}>
+      <div className="chartReadout">
         <strong>{activeLabel}</strong> — {activeText}
       </div>
     </div>

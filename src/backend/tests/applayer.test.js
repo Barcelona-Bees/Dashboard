@@ -1,11 +1,11 @@
-const {
+import {
     app,
     init,
     measurementHandler,
     dayHandler,
     twoWeeksHandler,
     verifyHandler,
-} = require("../appLayer/al.js");
+} from "../appLayer/al.js";
 
 beforeAll(async () => {
     await init();

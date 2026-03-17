@@ -5,7 +5,7 @@ export default function AlertsScreen() {
   return (
     <div className="page">
       <div className="center">
-        <div className="h1" style={{ fontSize: 18 }}>Stay up to date on major activity</div>
+        <div className="h1" style={{ fontSize: 18 }}>Activity & alerts</div>
         <div className="smallMuted">last updated: {fake.updatedAt}</div>
       </div>
 
