@@ -7,6 +7,7 @@ CREATE TABLE Hive(
 	name varchar(100) not null,
     zipcode char(5) not null,
     startDate datetime not null,
+    passkey char(100) not null
 );
 
 CREATE TABLE User(

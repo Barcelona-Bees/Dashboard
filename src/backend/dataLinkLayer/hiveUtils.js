@@ -8,3 +8,9 @@ async function getStartTime(hiveID){
 }
 
 getStartTime(1)
+
+async function testPasskey(passkey, hiveID){
+    let data = await dbutils.getData('hive',['1'],{hiveID : hiveID, passkey: passkey});
+
+    console.log(data)
+}
