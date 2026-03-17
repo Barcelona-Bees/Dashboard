@@ -1,4 +1,5 @@
-const dl = require("../dataLayer/dl.js");
+const { login, getSessionToken } = require("../dataLinkLayer/login.js");
+const { getStartTime } = require("../dataLinkLayer/hiveUtils.js");
 
 /**
  * Checks if login information is valid
@@ -7,8 +8,21 @@ const dl = require("../dataLayer/dl.js");
  * @param password 
  * @returns boolean
  */
-export function isValidLogin(username, password){
-    return dl.login(username, password);
+function isValidLogin(username, password){
+    return login(username, password);
+}
+
+/**
+ * Checks if hive id is in the database
+ * 
+ * @param id
+ * @returns boolean
+ */
+function isValidHive(id){
+    let data = getStartTime(id);
+    if(data != "undefined"){
+        return true
+    }
 }
 
 /**
@@ -17,8 +31,9 @@ export function isValidLogin(username, password){
  * @param data - A number
  * @returns boolean
  */
-export function isNum(data){
-    return typeof(data) == "number";
+function isNum(data){
+    if(typeof(data)=="number")return true;
+    return false;
 }
 
 /**
@@ -27,7 +42,7 @@ export function isNum(data){
  * @param data - A string
  * @returns boolean
  */
-export function isString(data){
+function isString(data){
     return typeof(data) == "string";
 }
 
@@ -37,21 +52,32 @@ export function isString(data){
  * @param date - A js date string
  * @returns boolean
  */
-export function isValidDate(date){
-    if(isString(data)){
-        let x = new Date(data);
-        return x !== "undefined"
+function isValidDate(hiveId, date){
+    if(isValidHive(hiveId) && isString(date)){
+        let x = new Date(date);
+        if(x == "undefined"){
+            return false;
+        }
+
+        let now = new Date();
+        let start = new Date(startTime(hiveId));
+
+        if(date<=now && date>=start){
+            return true;
+        }
     }
     return false;
 }
+
 /**
  * Checks if phone number is valid
  * 
  * @param num - A 10 digit phone number
  * @returns boolean
  */
-export function isValidPhone(num){
-    if(num.length = 10){
+function isValidPhone(num){
+    let numStr = ""+num;
+    if(isNum(num) && numStr.length == 10){
         return true;
     }
     return false;
@@ -63,25 +89,13 @@ export function isValidPhone(num){
  * @param email - A string
  * @returns boolean
  */
-export function isValidPhone(email){
-    const pattern = "/.*@.*/";
-    return pattern.test(email);
-}
-
-/**
- * Checks if date is within the database
- * 
- * @param date -A js date string
- * @returns boolean
- */
-export function dateOutOfRange(date){
-    let now = new Date();
-    let start = new Date(dl.startTime());
-
-    if(date.isValidDate() && date<=now && date>=start){
-        return true;
+function isValidEmail(email){
+    // const pattern = "/.*@.*/";
+    if(isString(email)){
+        let split = email.split("@");
+        if(split.length == 2)return true;
     }
-    return false;
+    return false
 }
 
 /**
@@ -90,8 +104,8 @@ export function dateOutOfRange(date){
  * @param token - Session token
  * @returns boolean
  */
-export function isValidSessionToken(token){
-    return dl.getSessionToken();
+function isValidSessionToken(token){
+    return getSessionToken();
 }
 
 /**
@@ -100,8 +114,8 @@ export function isValidSessionToken(token){
  * @param data - String to be hashed
  * @returns hashed string
  */
-export async function hash(data){
-    return bcrypt.hash(data, 10);
+async function hash(data){
+
 }
 
 /**
@@ -109,7 +123,7 @@ export async function hash(data){
  * 
  * @returns
  */
-export function generateToken(){
+function generateToken(){
 
 }
 
@@ -119,6 +133,19 @@ export function generateToken(){
  * @param data - String to be sanitized 
  * @returns sanitized string
  */
-export function sanitize(data){
+function sanitize(data){
     
+}
+
+module.exports = {
+    isValidLogin,
+    isValidHive,
+    isNum,
+    isString,
+    isValidDate,
+    isValidPhone,
+    isValidEmail,
+    isValidSessionToken,
+    hash,
+    sanitize
 }
