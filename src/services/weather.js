@@ -15,7 +15,7 @@ const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1/forecast';
 
 /** Default location: RIT campus, Rochester, NY */
 const DEFAULT_LAT = 43.0848;
-const DEFAULT_LON = -77.6744;
+const DEFAULT_LON = -77.6799;
 
 /**
  * Fetches hourly outside temperature for the last 2 days (yesterday + today)

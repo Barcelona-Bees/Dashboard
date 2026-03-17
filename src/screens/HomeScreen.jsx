@@ -50,19 +50,26 @@ export default function HomeScreen() {
 
         try {
           const weatherMap = await getHourlyOutsideTempsByDate();
-          const forDate = buildExternalTempFMapForDate(dateStr, weatherMap, celsiusToFahrenheit);
-          const hasWeather = Object.keys(forDate).length > 0;
-          setExternalTempByHour(hasWeather ? forDate : null);
+          const now = new Date();
+          const todayStr = now.toISOString().split("T")[0];
+          const hourLabel = `${now.getHours()}:00`;
 
-          if (hasWeather) {
-            const now = new Date();
-            const todayStr = now.toISOString().split("T")[0];
-            const hourLabel = `${now.getHours()}:00`;
-            const forCurrentHour = dateStr === todayStr ? forDate[hourLabel] : null;
+          // Outside temps should reflect *current* Rochester weather whenever available,
+          // even if backend chart data is from an older date.
+          const forToday = buildExternalTempFMapForDate(todayStr, weatherMap, celsiusToFahrenheit);
+          const hasTodayWeather = Object.keys(forToday).length > 0;
+
+          // Chart outside line: use today's Rochester hourly temps (keys match "0:00".."23:00").
+          setExternalTempByHour(hasTodayWeather ? forToday : null);
+
+          if (hasTodayWeather) {
+            const forCurrentHour = forToday[hourLabel];
             const fallbackHour = (() => {
-              const hours = Object.keys(forDate).map((k) => parseInt(k.split(":")[0], 10)).filter((n) => !Number.isNaN(n));
+              const hours = Object.keys(forToday)
+                .map((k) => parseInt(k.split(":")[0], 10))
+                .filter((n) => !Number.isNaN(n));
               const maxH = hours.length ? Math.max(...hours) : 23;
-              return forDate[`${maxH}:00`];
+              return forToday[`${maxH}:00`];
             })();
             setCurrentOutsideTempF(forCurrentHour != null ? forCurrentHour : fallbackHour);
           } else {
