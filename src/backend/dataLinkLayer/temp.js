@@ -88,7 +88,7 @@ async function getLastTemp(){
     let sqlString = "SELECT * FROM TEMPERATURE WHERE HIVEID = 1 AND tempid = (SELECT MAX(tempid) from Temperature where HIVEID = 1);";
     let rJSON = await dbutils.runDirectSQL(sqlString);
 
-    console.log(rJSON.rows[0]);
+    return rJSON.rows[0];
 }
 
 /**
@@ -104,7 +104,7 @@ async function getCustomRange(hiveID, startDate, endDate){
     let paramsArray = [hiveID, startDate, endDate];
     let rJson = await dbutils.runDirectSQLwithPrepared(sqlString, paramsArray );
 
-    console.log (rJson);
+    return rJson;
 }
 
 // await getLastTemp();
