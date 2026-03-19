@@ -1,13 +1,13 @@
 USE BarcBees;
 
-INSERT into User (userID, username, password, email, phone, dataStartDate)
+INSERT into Users (userID, username, password, email, phone, dataStartDate)
 	VALUES(1, 'Admin', 'Admin', 'admin@admin.com', NULL, date(now()) );
     
-INSERT into User (username, password, email, phone, dataStartDate)
-	VALUES('test', 'test', 'test@test.com', NULL, date(now()) );
+INSERT into Users (username, password, email, phone, dataStartDate)
+	VALUES(2,'test', 'test', 'test@test.com', NULL, date(now()) );
     
-INSERT INTO Hive (name, zipcode)
-		VALUES ('hive','14623');
+INSERT INTO Hive (hiveid, name, zipcode, passkey, startDate)
+		VALUES (1,'hive','14623','ofuscated for github',NOW());
 	
 INSERT INTO Notify(userID, notifType, temp, humidity, carbonDioxide, swarm)
 	VALUES(1, 'both', true, true, true, true);
