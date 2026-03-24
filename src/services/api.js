@@ -1,4 +1,18 @@
 const API_BASE = 'http://localhost:3001';
+import { getToken } from "./auth";
+
+/**
+ * Helper to add the Authorization header when we have a JWT.
+ * If there is no token yet, we just return the headers unchanged.
+ */
+function withAuthHeaders(baseHeaders = {}) {
+  const token = getToken();
+  if (!token) return baseHeaders;
+  return {
+    ...baseHeaders,
+    Authorization: `Bearer ${token}`,
+  };
+}
 
 /**
  * Fetches the most recent reading (current state)
@@ -6,7 +20,9 @@ const API_BASE = 'http://localhost:3001';
  */
 export async function getCurrentReading() {
   try {
-    const response = await fetch(`${API_BASE}/two-weeks`);
+    const response = await fetch(`${API_BASE}/two-weeks`, {
+      headers: withAuthHeaders(),
+    });
     const { data } = await response.json();
     
     if (!data || data.length === 0) {
@@ -33,7 +49,9 @@ export async function getCurrentReading() {
  */
 export async function getDayData(date) {
   try {
-    const response = await fetch(`${API_BASE}/day/${date}`);
+    const response = await fetch(`${API_BASE}/day/${date}`, {
+      headers: withAuthHeaders(),
+    });
     const { data } = await response.json();
     return data.map(([timestamp, tempC, humidity]) => ({
       timestamp,
@@ -51,7 +69,9 @@ export async function getDayData(date) {
  */
 export async function getTwoWeeksData() {
   try {
-    const response = await fetch(`${API_BASE}/two-weeks`);
+    const response = await fetch(`${API_BASE}/two-weeks`, {
+      headers: withAuthHeaders(),
+    });
     const { data } = await response.json();
     return data.map(([timestamp, tempC, humidity]) => ({
       timestamp,
@@ -69,7 +89,9 @@ export async function getTwoWeeksData() {
  */
 export async function getMeasurement(datetime) {
   try {
-    const response = await fetch(`${API_BASE}/measurement/${datetime}`);
+    const response = await fetch(`${API_BASE}/measurement/${datetime}`, {
+      headers: withAuthHeaders(),
+    });
     const { timestamp, temp, humidity } = await response.json();
     return {
       timestamp,

@@ -11,11 +11,24 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// ---------------------------------------------------------------------------
+// Global middleware
+// ---------------------------------------------------------------------------
+
+// Parse JSON request bodies.
 app.use(express.json());
+
+// Very simple CORS setup so the Vite dev server can call this API.
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  if (req.method === "OPTIONS") {
+    // Short-circuit preflight requests.
+    return res.sendStatus(204);
+  }
+
   next();
 });
 
@@ -23,6 +36,11 @@ const PORT = process.env.PORT || 3001;
 
 // MOCK data
 var hiveData = [];
+
+// Very small in-memory "user database" for demo auth.
+// Keys are emails, values are plain-text passwords.
+// This keeps things extremely simple and avoids any real DB setup.
+const users = new Map();
 
 /**
  * Gets data from a single timestamp.
@@ -118,6 +136,62 @@ async function init() {
 function verifyCSV() {
   return hiveData;
 }
+
+// ---------------------------------------------------------------------------
+// Auth endpoints (very small, demo-only implementation)
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/auth/register
+ * Body: { email, password }
+ *
+ * For this demo:
+ * - Stores users in memory (Map)
+ * - Rejects if the email already exists
+ * - Returns a simple string token the frontend treats as a JWT
+ */
+app.post("/api/auth/register", (req, res) => {
+  const { email, password } = req.body || {};
+
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email and password are required." });
+  }
+
+  if (users.has(email)) {
+    return res.status(409).json({ message: "An account with this email already exists." });
+  }
+
+  users.set(email, password);
+
+  // In a real app this would be a signed JWT. For this dashboard,
+  // the frontend only needs a string token, so we keep it simple.
+  const token = `demo-token-${Date.now()}`;
+
+  return res.status(201).json({ token });
+});
+
+/**
+ * POST /api/auth/login
+ * Body: { email, password }
+ *
+ * - Checks the in-memory user map
+ * - Returns a new simple token when credentials are valid
+ */
+app.post("/api/auth/login", (req, res) => {
+  const { email, password } = req.body || {};
+
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email and password are required." });
+  }
+
+  const storedPassword = users.get(email);
+  if (!storedPassword || storedPassword !== password) {
+    return res.status(401).json({ message: "Invalid email or password." });
+  }
+
+  const token = `demo-token-${Date.now()}`;
+  return res.json({ token });
+});
 
 // ---------------------------------------------------------------------------
 // Express route handlers (exported for Jest tests)

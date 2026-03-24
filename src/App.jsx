@@ -7,13 +7,15 @@ import HomeScreen from "./screens/HomeScreen";
 import AlertsScreen from "./screens/AlertsScreen";
 import DataScreen, { ExportModal } from "./screens/DataScreen";
 import AccountScreen from "./screens/AccountScreen";
+import RegisterScreen from "./screens/RegisterScreen";
+import { clearToken, isLoggedIn } from "./services/auth";
 
+/**
+ * Initial auth state is based on whether we already have a JWT token.
+ * This lets the user stay logged in across page refreshes.
+ */
 function getStoredAuth() {
-  try {
-    return localStorage.getItem("bb_authed") === "1";
-  } catch {
-    return false;
-  }
+  return isLoggedIn();
 }
 
 export default function App() {
@@ -21,7 +23,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("home");
   const [menuOpen, setMenuOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  // Simple toggle between login and register views.
+  const [authMode, setAuthMode] = useState("login"); // "login" | "register"
 
+  /**
+   * Decide which main screen to show when the user is logged in.
+   * These are the "protected" sections of the app.
+   */
   const screen = useMemo(() => {
     if (!authed) return null;
 
@@ -33,19 +41,29 @@ export default function App() {
       case "data":
         return <DataScreen onOpenExport={() => setExportOpen(true)} />;
       case "account":
-        return <AccountScreen onLogout={() => {
-          setAuthed(false);
-          try { localStorage.setItem("bb_authed", "0"); } catch {}
-          setActiveTab("home");
-        }} />;
+        return (
+          <AccountScreen
+            onLogout={() => {
+              // Clear both React state and the stored token when logging out.
+              clearToken();
+              setAuthed(false);
+              setActiveTab("home");
+              setAuthMode("login");
+            }}
+          />
+        );
       default:
         return <HomeScreen />;
     }
   }, [activeTab, authed]);
 
-  const handleLogin = () => {
+  /**
+   * Called after a successful login or registration.
+   * At this point the token has already been saved by the auth service.
+   */
+  const handleAuthSuccess = () => {
     setAuthed(true);
-    try { localStorage.setItem("bb_authed", "1"); } catch {}
+    setActiveTab("home");
   };
 
   return (
@@ -63,7 +81,17 @@ export default function App() {
         />
 
         {!authed ? (
-          <LoginScreen onLogin={handleLogin} />
+          authMode === "login" ? (
+            <LoginScreen
+              onLoginSuccess={handleAuthSuccess}
+              onSwitchToRegister={() => setAuthMode("register")}
+            />
+          ) : (
+            <RegisterScreen
+              onRegisterSuccess={handleAuthSuccess}
+              onSwitchToLogin={() => setAuthMode("login")}
+            />
+          )
         ) : (
           <>
             {screen}
@@ -74,3 +102,4 @@ export default function App() {
     </div>
   );
 }
+

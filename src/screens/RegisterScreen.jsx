@@ -1,15 +1,16 @@
 import { useState } from "react";
-import { login } from "../services/auth";
+import { register } from "../services/auth";
 
 /**
- * Login page:
- * - Collects email and password
- * - Calls the backend /api/auth/login endpoint
- * - On success, notifies the parent so the app can switch to protected screens
+ * Simple registration page:
+ * - Email, password, confirm password
+ * - Basic client-side validation
+ * - On success, logs the user in and switches to the protected app
  */
-export default function LoginScreen({ onLoginSuccess, onSwitchToRegister }) {
+export default function RegisterScreen({ onRegisterSuccess, onSwitchToLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -17,18 +18,28 @@ export default function LoginScreen({ onLoginSuccess, onSwitchToRegister }) {
     e.preventDefault();
     setError(null);
 
-    if (!email || !password) {
-      setError("Please enter both email and password.");
+    if (!email || !password || !confirmPassword) {
+      setError("Please fill out all fields.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password should be at least 6 characters long.");
       return;
     }
 
     try {
       setLoading(true);
-      await login({ email, password });
-      // The auth service has stored the token at this point.
-      onLoginSuccess();
+      await register({ email, password });
+      // Token is stored by the auth service; we just notify the parent.
+      onRegisterSuccess();
     } catch (err) {
-      setError(err.message || "Unable to log in. Please try again.");
+      setError(err.message || "Unable to create account. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -39,7 +50,7 @@ export default function LoginScreen({ onLoginSuccess, onSwitchToRegister }) {
       <div className="loginCard">
         <div className="logoBig">BB</div>
         <div className="center" style={{ fontWeight: 900, marginBottom: 6 }}>
-          Login to access your hive
+          Create your hive account
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -47,7 +58,7 @@ export default function LoginScreen({ onLoginSuccess, onSwitchToRegister }) {
             <div className="fieldLabel">Email</div>
             <input
               type="email"
-              placeholder="kimberlybee@gmail.com"
+              placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -63,6 +74,16 @@ export default function LoginScreen({ onLoginSuccess, onSwitchToRegister }) {
             />
           </div>
 
+          <div className="field">
+            <div className="fieldLabel">Confirm password</div>
+            <input
+              placeholder="********"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
+
           {error && (
             <div className="smallMuted" style={{ color: "var(--danger)", marginTop: 8 }}>
               {error}
@@ -70,19 +91,19 @@ export default function LoginScreen({ onLoginSuccess, onSwitchToRegister }) {
           )}
 
           <button className="loginBtn" type="submit" disabled={loading}>
-            {loading ? "Logging in..." : "Login"}
+            {loading ? "Creating account..." : "Create account"}
           </button>
         </form>
 
         <div className="center" style={{ marginTop: 12, fontSize: 12 }}>
-          <span>Need an account? </span>
+          <span>Already have an account? </span>
           <button
             type="button"
             className="linkBtn"
             style={{ border: "none", background: "none", padding: 0 }}
-            onClick={onSwitchToRegister}
+            onClick={onSwitchToLogin}
           >
-            Register
+            Login
           </button>
         </div>
       </div>
