@@ -110,3 +110,8 @@ async function getCustomRange(hiveID, startDate, endDate){
 // await getLastTemp();
 // insertTemp();
 await getCustomRange(1,'2026-02-01','2026-03-06');
+
+export{
+    getCustomRange,
+    insertTemp
+}

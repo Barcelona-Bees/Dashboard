@@ -1,10 +1,8 @@
 // Application layer – Express API over hive data (calls bl functions to send data to frontend)
 
-const express = require("express");
-const fs = require("fs/promises");
-const path = require("path");
-const dl = require("../dataLayer/dl.js");
-const bl = require("../businessLayer/bl.js");
+import express from "express";
+import { getCustomRange } from "../dataLinkLayer/temp.js";
+import { isValidDate, isValidHive, isNum } from "../busLayer/utils.js";
 
 const app = express();
 
@@ -22,11 +20,11 @@ function round(date) {
 app.get('/measurement', (req, res) => {
     const timestamp = new Date(req.query.datetime);
 
-    if (!bl.isValidDate(timestamp) || bl.dateOutOfRange(timestamp)) {
+    if (!isValidDate(timestamp) || dateOutOfRange(timestamp)) {
         return res.status(400).json({ error: 'Invalid or out-of-range date' });
     }
 
-    const measurement = dl.getTemperatureValue(timestamp);
+    const measurement = getTemperatureValue(timestamp);
     return res.status(200).json({ measurement });
 });
 
@@ -38,11 +36,11 @@ app.get('/measurement', (req, res) => {
 app.get('/measurement/latest', (req, res) => {
     const timestamp = round(new Date());
 
-    if (!bl.isValidDate(timestamp) || bl.dateOutOfRange(timestamp)) {
+    if (!isValidDate(timestamp) || dateOutOfRange(timestamp)) {
         return res.status(400).json({ error: 'Invalid or out-of-range date' });
     }
 
-    const measurement = dl.getTemperatureValue(timestamp);
+    const measurement = getTemperatureValue(timestamp);
     return res.status(200).json({ measurement });
 });
 
@@ -58,16 +56,16 @@ app.get('/day', (req, res) => {
     const today = new Date(req.query.datetime);
     const yesterday = new Date(today - dayInMS);
 
-    if (!bl.isValidDate(today)) {
+    if (!isValidDate(today)) {
         return res.status(400).json({ error: 'Invalid date' });
     }
 
-    if (bl.isValidDate(yesterday) || bl.dateOutOfRange(yesterday)) {
-        const startDate = dl.getStartDate();
-        return res.status(200).json({ measurement: dl.getCustomRange(today, startDate) });
+    if (isValidDate(yesterday) || dateOutOfRange(yesterday)) {
+        const startDate = getStartDate();
+        return res.status(200).json({ measurement: getCustomRange(today, startDate) });
     }
 
-    return res.status(200).json({ measurement: dl.getCustomRange(today, yesterday) });
+    return res.status(200).json({ measurement: getCustomRange(today, yesterday) });
 });
 
 /**
@@ -81,16 +79,16 @@ app.get('/week', (req, res) => {
     const today = new Date(req.query.datetime);
     const yesterday = new Date(today - dayInMS);
 
-    if (!bl.isValidDate(today)) {
+    if (!isValidDate(today)) {
         return res.status(400).json({ error: 'Invalid date' });
     }
 
-    if (bl.isValidDate(yesterday) || bl.dateOutOfRange(yesterday)) {
-        const startDate = dl.getStartDate();
-        return res.status(200).json({ measurement: dl.getCustomRange(today, startDate) });
+    if (isValidDate(yesterday) || dateOutOfRange(yesterday)) {
+        const startDate = getStartDate();
+        return res.status(200).json({ measurement: getCustomRange(today, startDate) });
     }
 
-    return res.status(200).json({ measurement: dl.getCustomRange(today, yesterday) });
+    return res.status(200).json({ measurement: getCustomRange(today, yesterday) });
 });
 
 /**
@@ -104,16 +102,16 @@ app.get('/twoweeks', (req, res) => {
     const today = round(new Date());
     const twoWeeks = new Date(today - twoWeeksInMS);
 
-    if (!bl.isValidDate(today) || bl.dateOutOfRange(today)) {
+    if (!isValidDate(today) || dateOutOfRange(today)) {
         return res.status(400).json({ error: 'Invalid or out-of-range date' });
     }
 
-    if (!bl.isValidDate(twoWeeks) || bl.dateOutOfRange(twoWeeks)) {
-        const startDate = dl.getStartDate();
-        return res.status(200).json({ measurement: dl.getCustomRange(today, startDate) });
+    if (!isValidDate(twoWeeks) || dateOutOfRange(twoWeeks)) {
+        const startDate = getStartDate();
+        return res.status(200).json({ measurement: getCustomRange(today, startDate) });
     }
 
-    return res.status(200).json({ measurement: dl.getCustomRange(today, twoWeeks) });
+    return res.status(200).json({ measurement: getCustomRange(today, twoWeeks) });
 });
 
 /**
@@ -127,14 +125,43 @@ app.get('/range', (req, res) => {
     const start = new Date(req.query.start);
     const end = new Date(req.query.end);
 
-    if (!bl.isValidDate(start) || bl.dateOutOfRange(start)) {
+    if (!isValidDate(start) || dateOutOfRange(start)) {
         return res.status(400).json({ error: 'Invalid or out-of-range start date' });
     }
 
-    if (!bl.isValidDate(end) || bl.dateOutOfRange(end)) {
-        const startDate = dl.getStartDate();
-        return res.status(200).json({ measurement: dl.getCustomRange(start, startDate) });
+    if (!isValidDate(end) || dateOutOfRange(end)) {
+        const startDate = getStartDate();
+        return res.status(200).json({ measurement: getCustomRange(start, startDate) });
     }
 
-    return res.status(200).json({ measurement: dl.getCustomRange(start, end) });
+    return res.status(200).json({ measurement: getCustomRange(start, end) });
+});
+
+app.post('/upload', (req,res)=>{
+    const { hiveID, timestamp, key, temperature } = req.body;
+    error = "";
+
+    if(!key){
+        return res.status(400).json({ error: 'Invalid Key'});
+    }
+    if(!isValidHive(hiveID)){
+        error = "hiveID is invalid";
+    }
+    if(!bl.isValidDate(timestamp)){
+        error = "timestamp is invalid";
+    }
+    if(isNum(temperature)){
+        error = "temperature is not a number";
+    }
+    
+    try{
+        insertTemp(hiveID,temperature,timestamp);
+    }catch(e){
+        error = ""+e;
+    }
+
+    if(error != ""){
+        return res.status(400).json({ error: error});
+    }
+    return res.status(400).json({ error: error});
 });
