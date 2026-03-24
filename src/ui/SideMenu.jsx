@@ -1,3 +1,5 @@
+import { useTheme } from "../context/ThemeContext";
+
 const items = [
   { key: "home", label: "Home" },
   { key: "alerts", label: "Notifications" },
@@ -6,6 +8,8 @@ const items = [
 ];
 
 export default function SideMenu({ open, activeTab, onClose, onSelect }) {
+  const { theme, toggleTheme } = useTheme();
+
   if (!open) return null;
 
   return (
@@ -22,6 +26,16 @@ export default function SideMenu({ open, activeTab, onClose, onSelect }) {
               {it.label}
             </button>
           ))}
+          <div className="themeToggleRow">
+            <span className="themeToggleLabel">{theme === "light" ? "☀️ Light" : "🌙 Dark"}</span>
+            <button
+              type="button"
+              className={"toggle " + (theme === "dark" ? "on" : "")}
+              aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+              aria-pressed={theme === "dark"}
+              onClick={toggleTheme}
+            />
+          </div>
         </div>
       </div>
     </>

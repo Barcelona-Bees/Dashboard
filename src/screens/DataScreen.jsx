@@ -1,27 +1,98 @@
 import Modal from "../ui/Modal";
-import { fake } from "../data/fake";
-import { useMemo, useState } from "react";
+import { DataSkeleton } from "../components/Skeleton";
+import { useState, useEffect } from "react";
 import AccessibleLineChart from "../components/AccessibleLineChart";
+import { getTwoWeeksData } from "../services/api";
+import { transformTo2WeekChart } from "../services/dataTransform";
+import { formatTimestamp } from "../utils/conversions";
 
 export default function DataScreen({ onOpenExport }) {
-  const seriesData = useMemo(() => fake.chart2w.map((p, idx) => ({
-    xLabel: p.d,
-    temperature: p.value,
-    volume: 40 + (idx % 5) * 4,
-    co2: 1.0 + (idx % 6) * 0.2,
-    humidity: 55 + (idx % 7) * 3
-  })), []);
+  const [seriesData, setSeriesData] = useState([]);
+  const [updatedAt, setUpdatedAt] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const data = await getTwoWeeksData();
+        const chartData = transformTo2WeekChart(data);
+        
+        // Calculate humidity averages per day
+        const humidityData = {};
+        data.forEach(({ timestamp, humidity }) => {
+          const date = new Date(timestamp);
+          const dayKey = date.toISOString().split('T')[0];
+          if (!humidityData[dayKey]) {
+            humidityData[dayKey] = [];
+          }
+          humidityData[dayKey].push(humidity);
+        });
+        
+        const days = Object.entries(humidityData).sort();
+        const avgHumidity = days.map(([, humidities]) => 
+          Math.round(humidities.reduce((a, b) => a + b, 0) / humidities.length)
+        );
+        
+        // Transform for chart component
+        const formatted = chartData.map((p, idx) => ({
+          xLabel: p.d,
+          temperature: p.value,
+          volume: 40 + (idx % 5) * 4, // TODO: Replace with real volume data when available
+          co2: 0.5 + (idx % 6) * 0.2, // TODO: Replace with real CO2 data when available
+          humidity: avgHumidity[idx] || 55, // Use actual humidity data
+        }));
+        
+        setSeriesData(formatted);
+        // Use the timestamp from the most recent data point
+        const mostRecentTimestamp = data.length > 0 ? data[data.length - 1].timestamp : null;
+        setUpdatedAt(mostRecentTimestamp ? formatTimestamp(mostRecentTimestamp) : '');
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError('Failed to load data. Please check if the backend server is running.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return <DataSkeleton />;
+  }
+
+  if (error) {
+    return (
+      <div className="page">
+        <div className="center">
+          <div className="h1" style={{ color: 'var(--danger)' }}>Error</div>
+          <div className="smallMuted">{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  const hasData = seriesData.length > 0;
 
   return (
     <div className="page">
       <div className="dataTopRow">
         <div className="center" style={{ flex: 1 }}>
-          <div className="h1" style={{ fontSize: 18 }}>Historical data</div>
-          <div className="smallMuted">last updated: {fake.updatedAt}</div>
+          <div className="h1" style={{ fontSize: 18 }}>2-week overview</div>
+          <div className="smallMuted">last updated: {updatedAt}</div>
         </div>
-        <button className="exportBtn" onClick={onOpenExport}>Export</button>
+        <button className="exportBtn" onClick={onOpenExport} disabled={!hasData}>Export</button>
       </div>
 
+      {!hasData ? (
+        <div className="emptyState" style={{ marginTop: 24 }}>
+          No historical data yet. Data will appear once the sensor starts reporting.
+        </div>
+      ) : (
       <div className="dataGrid">
         <div className="chartFrame">
           <AccessibleLineChart
@@ -59,6 +130,7 @@ export default function DataScreen({ onOpenExport }) {
           />
         </div>
       </div>
+      )}
     </div>
   );
 }
