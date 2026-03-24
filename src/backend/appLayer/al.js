@@ -137,31 +137,27 @@ app.get('/range', (req, res) => {
     return res.status(200).json({ measurement: getCustomRange(start, end) });
 });
 
-app.post('/upload', (req,res)=>{
+app.post('/upload', (req, res) => {
     const { hiveID, timestamp, key, temperature } = req.body;
-    error = "";
 
-    if(!key){
-        return res.status(400).json({ error: 'Invalid Key'});
+    if (!key) {
+        return res.status(400).json({ error: 'Invalid Key' });
     }
-    if(!isValidHive(hiveID)){
-        error = "hiveID is invalid";
+    if (!isValidHive(hiveID)) {
+        return res.status(400).json({ error: 'hiveID is invalid' });
     }
-    if(!bl.isValidDate(timestamp)){
-        error = "timestamp is invalid";
+    if (!bl.isValidDate(timestamp)) {
+        return res.status(400).json({ error: 'timestamp is invalid' });
     }
-    if(isNum(temperature)){
-        error = "temperature is not a number";
-    }
-    
-    try{
-        insertTemp(hiveID,temperature,timestamp);
-    }catch(e){
-        error = ""+e;
+    if (!isNum(temperature)) {
+        return res.status(400).json({ error: 'temperature is not a number' });
     }
 
-    if(error != ""){
-        return res.status(400).json({ error: error});
+    try {
+        insertTemp(hiveID, temperature, timestamp);
+    } catch (e) {
+        return res.status(500).json({ error: '' + e });
     }
-    return res.status(400).json({ error: error});
+
+    return res.status(200).json({ success: true });
 });
