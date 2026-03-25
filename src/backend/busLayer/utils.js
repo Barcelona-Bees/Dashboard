@@ -58,6 +58,22 @@ function isValidDateValue(d) {
 }
 
 /**
+ * Converts a numeric input into a finite number.
+ * Returns null when the value cannot be parsed as a finite number.
+ *
+ * @param value number | string
+ * @returns number | null
+ */
+function toNumericReading(value) {
+    if (isNum(value) && Number.isFinite(value)) return value;
+    if (isString(value)) {
+        const n = Number(value);
+        if (Number.isFinite(n)) return n;
+    }
+    return null;
+}
+
+/**
  * Checks if date is valid for the hive (between hive start and now)
  *
  * @param hiveId
@@ -149,6 +165,7 @@ export {
     isNum,
     isString,
     isValidDateValue,
+    toNumericReading,
     isValidDate,
     isValidPhone,
     isValidEmail,

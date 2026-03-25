@@ -3,9 +3,10 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
-import { insertData, runDirectSQLwithPrepared } from "../dataLinkLayer/dbutils.js";
+import { insertData, getData } from "../dataLinkLayer/dbutils.js";
 import { getStartTime, testPasskey } from "../dataLinkLayer/hiveUtils.js";
-import { isNum, isString, isValidDateValue } from "../busLayer/utils.js";
+import { getCustomRange } from "../dataLinkLayer/temp.js";
+import { isValidDateValue, toNumericReading } from "../busLayer/utils.js";
 
 /** True when this file is the process entrypoint (not when Jest or another module imports it). */
 const isMainModule =
@@ -33,15 +34,6 @@ function round(date) {
     return new Date(Math.floor(date.getTime() / ms) * ms);
 }
 
-function toNumericReading(value) {
-    if (isNum(value) && Number.isFinite(value)) return value;
-    if (isString(value)) {
-        const n = Number(value);
-        if (Number.isFinite(n)) return n;
-    }
-    return null;
-}
-
 async function getHiveStartDate(hiveID = DEFAULT_HIVE_ID) {
     const row = await getStartTime(hiveID);
     if (!row?.startdate) return new Date(0);
@@ -52,19 +44,6 @@ async function dateOutOfRange(d) {
     if (d.getTime() > Date.now()) return true;
     const start = await getHiveStartDate(DEFAULT_HIVE_ID);
     return d.getTime() < start.getTime();
-}
-
-async function getCustomRange(hiveID, startDate, endDate) {
-    const sql =
-        "SELECT timestamp, reading FROM Temperature WHERE hiveID = $1 AND timestamp BETWEEN $2 AND $3 ORDER BY timestamp ASC";
-    return await runDirectSQLwithPrepared(sql, [hiveID, startDate, endDate]);
-}
-
-async function getTemperatureValue(timestamp, hiveID = DEFAULT_HIVE_ID) {
-    const sql =
-        "SELECT reading FROM Temperature WHERE hiveID = $1 AND timestamp = $2 LIMIT 1";
-    const r = await runDirectSQLwithPrepared(sql, [hiveID, timestamp]);
-    return r.rows?.[0]?.reading ?? null;
 }
 
 /**
@@ -80,7 +59,11 @@ app.get("/measurement", async (req, res) => {
         return res.status(400).json({ error: "Invalid or out-of-range date" });
     }
 
-    const measurement = await getTemperatureValue(timestamp);
+    const result = await getData("Temperature", ["reading"], {
+        hiveID: DEFAULT_HIVE_ID,
+        timestamp,
+    });
+    const measurement = result.rows?.[0]?.reading ?? null;
     return res.status(200).json({ measurement });
 });
 
@@ -96,7 +79,11 @@ app.get("/measurement/latest", async (req, res) => {
         return res.status(400).json({ error: "Invalid or out-of-range date" });
     }
 
-    const measurement = await getTemperatureValue(timestamp);
+    const result = await getData("Temperature", ["reading"], {
+        hiveID: DEFAULT_HIVE_ID,
+        timestamp,
+    });
+    const measurement = result.rows?.[0]?.reading ?? null;
     return res.status(200).json({ measurement });
 });
 
