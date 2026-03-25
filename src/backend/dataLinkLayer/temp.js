@@ -100,7 +100,7 @@ async function getLastTemp(){
  * @param {*} endDate - the ending date to look for
  */
 async function getCustomRange(hiveID, startDate, endDate){
-    let sqlString = "SELECT (timestamp, reading) FROM Temperature WHERE hiveID = $1 AND timestamp BETWEEN $2 AND $3 ;";
+    let sqlString = "SELECT timestamp, reading FROM Temperature WHERE hiveID = $1 AND timestamp BETWEEN $2 AND $3";
     let paramsArray = [hiveID, startDate, endDate];
     let rJson = await dbutils.runDirectSQLwithPrepared(sqlString, paramsArray );
 
@@ -109,4 +109,9 @@ async function getCustomRange(hiveID, startDate, endDate){
 
 // await getLastTemp();
 // insertTemp();
-await getCustomRange(1,'2026-02-01','2026-03-06');
+// getCustomRange(1,'2026-02-01','2026-03-06'); // run manually when testing DB
+
+export {
+    getCustomRange,
+    insertTemp,
+};

@@ -1,83 +1,85 @@
-const { login, getSessionToken } = require("../dataLinkLayer/login.js");
-const { getStartTime } = require("../dataLinkLayer/hiveUtils.js");
+import { login, validSessionToken } from "../dataLinkLayer/login.js";
+import { getStartTime } from "../dataLinkLayer/hiveUtils.js";
 
 /**
  * Checks if login information is valid
- * 
- * @param username 
- * @param password 
+ *
+ * @param username
+ * @param password
  * @returns boolean
  */
-function isValidLogin(username, password){
-    return login(username, password);
+async function isValidLogin(username, password) {
+    return await login(username, password);
 }
 
 /**
  * Checks if hive id is in the database
- * 
+ *
  * @param id
  * @returns boolean
  */
-function isValidHive(id){
-    let data = getStartTime(id);
-    if(data != "undefined"){
-        return true
+async function isValidHive(id) {
+    if (typeof id === "string") {
+        return false;
     }
+    const row = await getStartTime(Number(id));
+    return !!(row && row.startdate != null);
 }
 
 /**
  * Checks if input is an integer
- * 
+ *
  * @param data - A number
  * @returns boolean
  */
-function isNum(data){
-    if(typeof(data)=="number")return true;
+function isNum(data) {
+    if (typeof data == "number") return true;
     return false;
 }
 
 /**
  * Checks if input is a string
- * 
+ *
  * @param data - A string
  * @returns boolean
  */
-function isString(data){
-    return typeof(data) == "string";
+function isString(data) {
+    return typeof data == "string";
 }
 
 /**
- * Checks if date is valid
- * 
- * @param date - A js date string
+ * Checks if date is valid for the hive (between hive start and now)
+ *
+ * @param hiveId
+ * @param date - Date or ISO string
  * @returns boolean
  */
-function isValidDate(hiveId, date){
-    if(isValidHive(hiveId) && isString(date)){
-        let x = new Date(date);
-        if(x == "undefined"){
-            return false;
-        }
-
-        let now = new Date();
-        let start = new Date(startTime(hiveId));
-
-        if(date<=now && date>=start){
-            return true;
-        }
+async function isValidDate(hiveId, date) {
+    if (!(await isValidHive(hiveId))) {
+        return false;
     }
-    return false;
+    const row = await getStartTime(hiveId);
+    if (!row?.startdate) {
+        return false;
+    }
+    const start = new Date(row.startdate);
+    const d = date instanceof Date ? date : new Date(date);
+    if (Number.isNaN(d.getTime())) {
+        return false;
+    }
+    const now = new Date();
+    return d >= start && d <= now;
 }
 
 /**
  * Checks if phone number is valid
- * 
+ *
  * @param num - A 10 digit phone number
  * @returns boolean
  */
-function isValidPhone(num){
-    let numStr = ""+num;
-    if(isNum(num) && numStr.length == 10){
+function isValidPhone(num) {
+    let numStr = "" + num;
+    if (isNum(num) && numStr.length == 10) {
         return true;
     }
     return false;
@@ -85,59 +87,53 @@ function isValidPhone(num){
 
 /**
  * Checks if email is valid
- * 
+ *
  * @param email - A string
  * @returns boolean
  */
-function isValidEmail(email){
-    // const pattern = "/.*@.*/";
-    if(isString(email)){
+function isValidEmail(email) {
+    if (isString(email)) {
         let split = email.split("@");
-        if(split.length == 2)return true;
+        if (split.length == 2) return true;
     }
-    return false
+    return false;
 }
 
 /**
- * Checks if session token is Valid
- * 
+ * Checks if session token is valid (returns a user id when valid)
+ *
  * @param token - Session token
  * @returns boolean
  */
-function isValidSessionToken(token){
-    return getSessionToken();
+async function isValidSessionToken(token) {
+    const userId = await validSessionToken(token);
+    return userId !== -1;
 }
 
 /**
  * Hashes input
- * 
+ *
  * @param data - String to be hashed
  * @returns hashed string
  */
-async function hash(data){
-
-}
+async function hash(data) {}
 
 /**
  * Generates a new user token
- * 
+ *
  * @returns
  */
-function generateToken(){
-
-}
+function generateToken() {}
 
 /**
  * Sanitizes the given string
- * 
- * @param data - String to be sanitized 
+ *
+ * @param data - String to be sanitized
  * @returns sanitized string
  */
-function sanitize(data){
-    
-}
+function sanitize(data) {}
 
-module.exports = {
+export {
     isValidLogin,
     isValidHive,
     isNum,
@@ -147,5 +143,6 @@ module.exports = {
     isValidEmail,
     isValidSessionToken,
     hash,
-    sanitize
-}
+    sanitize,
+    generateToken,
+};

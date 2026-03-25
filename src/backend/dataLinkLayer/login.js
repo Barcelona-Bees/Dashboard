@@ -8,14 +8,12 @@ import * as dbutils from "./dbutils.js";
  * @returns true or false
  */
 async function login(username, password){
-    let data = await dbutils.getData('Users',['1'],{username : username, password: password});
+    let data = await dbutils.getData("Users", ["*"], { username: username, password: password });
 
-    if(parseInt(data['rowCount']) == 1){
+    if (data && typeof data.rowCount === "number" && parseInt(data.rowCount, 10) === 1) {
         return true;
     }
-    else{
-        return false
-    }
+    return false;
 } 
 
 /**
@@ -25,12 +23,12 @@ async function login(username, password){
  * @returns userID if true, -1 if invalid
  */
 async function validSessionToken(sessionToken){
-    let data = await dbutils.getData('Users',['userID'],{sessionToken: sessionToken});
+    let data = await dbutils.getData("Users", ["userID"], { sessionToken: sessionToken });
 
-    if(parseInt(data['rowCount']) == 1){
-        return data['rows'][0]['userID'];
+    if (data && typeof data.rowCount === "number" && parseInt(data.rowCount, 10) === 1) {
+        return data.rows[0]["userID"];
     }
-    else{
-        return -1
-    }
+    return -1;
 }
+
+export { login, validSessionToken };
