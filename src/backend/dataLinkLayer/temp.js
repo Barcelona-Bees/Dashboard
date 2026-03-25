@@ -111,7 +111,7 @@ async function getTemperatureReadingAt(hiveID, timestamp) {
  */
 async function getLatestTemperatureReading(hiveID) {
     const sql =
-        "SELECT reading FROM Temperature WHERE hiveID = $1 ORDER BY timestamp DESC LIMIT 1";
+        "SELECT reading FROM Temperature WHERE hiveID =siteinfo=> SELECT * FROM temperature where timestamp = '2026-03- $1 ORDER BY timestamp DESC LIMIT 1";
     return await dbutils.runDirectSQLwithPrepared(sql, [hiveID]);
 }
 
@@ -133,6 +133,18 @@ async function getCustomRange(hiveID, startDate, endDate){
     return rJson;
 }
 
+
+/**
+ * Latest temperature reading for a hive (row with max timestamp).
+ *
+ * @param {number} hiveID
+ */
+async function getTempMeasurement(hiveID, timestamp, measurement = 'day') {
+    const sql =
+        "SELECT timestamp, reading FROM Temperature WHERE hiveID = $1, DATE_TRUNC('$2',timestamp) = '$3'";
+    return await dbutils.runDirectSQLwithPrepared(sql, [hiveID,timestamp, measurement]);
+}
+
 // await getLastTemp();
 // insertTemp();
 // getCustomRange(1,'2026-02-01','2026-03-06'); // run manually when testing DB
@@ -142,4 +154,5 @@ export {
     getLatestTemperatureReading,
     getTemperatureReadingAt,
     insertTemp,
+    getTempMeasurement
 };
