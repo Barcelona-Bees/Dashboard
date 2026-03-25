@@ -1,167 +1,162 @@
-// Application layer – Express API over hive data (calls bl functions to send data to frontend)
-
 import express from "express";
-import { getCustomRange } from "../dataLinkLayer/temp.js";
-import { isValidDate, isValidHive, isNum } from "../busLayer/utils.js";
+import {
+  getLatestMeasurement,
+  getMeasurementByTimestamp,
+  getMeasurementsBetween,
+} from "../dataLinkLayer/temp.js";
+import { assertIsoDate, assertIsoDateTime, parseHiveId } from "../busLayer/utils.js";
+import { pingDatabase } from "../dataLinkLayer/dbutils.js";
 
-const app = express();
-
-function round(date) {
-    const ms = 10 * 60 * 1000;
-    return new Date(Math.floor(date.getTime() / ms) * ms);
+function toApiRow(row) {
+  return {
+    timestamp: row.timestamp,
+    temperatureC: Number(row.temperatureC),
+    humidity: Number(row.humidity),
+  };
 }
 
-/**
- * Gets data from a single timestamp.
- *
- * @param datetime Timestamp as a string: 2026-01-14T23:50:00
- * @returns json
- */
-app.get('/measurement', (req, res) => {
-    const timestamp = new Date(req.query.datetime);
+function sendBadRequest(res, message) {
+  return res.status(400).json({ error: message });
+}
 
-    if (!isValidDate(timestamp) || dateOutOfRange(timestamp)) {
-        return res.status(400).json({ error: 'Invalid or out-of-range date' });
+function buildMeasurementStore(measurementStore) {
+  return measurementStore ?? {
+    getLatestMeasurement,
+    getMeasurementByTimestamp,
+    getMeasurementsBetween,
+  };
+}
+
+export function createHandlers(measurementStore) {
+  const store = buildMeasurementStore(measurementStore);
+
+  return {
+    healthHandler: async (_req, res) => {
+      try {
+        await pingDatabase();
+        return res.status(200).json({ status: "ok" });
+      } catch (error) {
+        return res.status(503).json({
+          status: "degraded",
+          error: error instanceof Error ? error.message : "Database unavailable",
+        });
+      }
+    },
+    latestMeasurementHandler: async (req, res) => {
+      try {
+        const hiveId = parseHiveId(req.query.hiveId);
+        const row = await store.getLatestMeasurement(hiveId);
+
+        if (!row) {
+          return res.status(404).json({ error: "No measurements found" });
+        }
+
+        return res.status(200).json(toApiRow(row));
+      } catch (error) {
+        return sendBadRequest(res, error.message);
+      }
+    },
+    measurementHandler: async (req, res) => {
+      try {
+        const hiveId = parseHiveId(req.query.hiveId);
+        const timestamp = assertIsoDateTime(req.params.datetime, "datetime");
+        const row = await store.getMeasurementByTimestamp(hiveId, timestamp);
+
+        if (!row) {
+          return res.status(404).json({ error: "Measurement not found" });
+        }
+
+        return res.status(200).json(toApiRow(row));
+      } catch (error) {
+        return sendBadRequest(res, error.message);
+      }
+    },
+    dayHandler: async (req, res) => {
+      try {
+        const hiveId = parseHiveId(req.query.hiveId);
+        const date = assertIsoDate(req.params.date, "date");
+        const start = `${date}T00:00:00Z`;
+        const end = `${date}T23:59:59Z`;
+        const rows = await store.getMeasurementsBetween(hiveId, start, end);
+
+        return res.status(200).json({
+          date,
+          data: rows.map((row) => [row.timestamp, String(row.temperatureC), String(row.humidity)]),
+        });
+      } catch (error) {
+        return sendBadRequest(res, error.message);
+      }
+    },
+    twoWeeksHandler: async (req, res) => {
+      try {
+        const hiveId = parseHiveId(req.query.hiveId);
+        const latest = await store.getLatestMeasurement(hiveId);
+
+        if (!latest) {
+          return res.status(200).json({ data: [] });
+        }
+
+        const endDate = new Date(latest.timestamp);
+        const startDate = new Date(endDate.getTime() - 14 * 24 * 60 * 60 * 1000);
+        const rows = await store.getMeasurementsBetween(
+          hiveId,
+          startDate.toISOString(),
+          endDate.toISOString(),
+        );
+
+        return res.status(200).json({
+          data: rows.map((row) => [row.timestamp, String(row.temperatureC), String(row.humidity)]),
+        });
+      } catch (error) {
+        return sendBadRequest(res, error.message);
+      }
+    },
+  };
+}
+
+export function createApp(measurementStore = {
+  getLatestMeasurement,
+  getMeasurementByTimestamp,
+  getMeasurementsBetween,
+}) {
+  const app = express();
+  const handlers = createHandlers(measurementStore);
+
+  app.use(express.json());
+  app.use((req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(204);
     }
+    next();
+  });
 
-    const measurement = getTemperatureValue(timestamp);
-    return res.status(200).json({ measurement });
-});
+  app.get("/health", handlers.healthHandler);
+  app.get("/measurement/latest", handlers.latestMeasurementHandler);
+  app.get("/measurement/:datetime", handlers.measurementHandler);
+  app.get("/day/:date", handlers.dayHandler);
+  app.get("/two-weeks", handlers.twoWeeksHandler);
 
-/**
- * Gets most recent timestamp of data.
- *
- * @returns json
- */
-app.get('/measurement/latest', (req, res) => {
-    const timestamp = round(new Date());
+  return app;
+}
 
-    if (!isValidDate(timestamp) || dateOutOfRange(timestamp)) {
-        return res.status(400).json({ error: 'Invalid or out-of-range date' });
-    }
+export async function startServer() {
+  const app = createApp();
+  const port = Number(process.env.PORT ?? 3001);
 
-    const measurement = getTemperatureValue(timestamp);
-    return res.status(200).json({ measurement });
-});
+  return new Promise((resolve) => {
+    const server = app.listen(port, () => {
+      console.log(`Backend listening on http://localhost:${port}`);
+      resolve(server);
+    });
+  });
+}
 
-/**
- * Gets all the data from a 24 hour period.
- *
- * @param datetime Datetime as a string: 2026-01-14T23:50:00
- * @returns json
- */
-app.get('/day', (req, res) => {
-    const dayInMS = 1000 * 60 * 60 * 24;
-
-    const today = new Date(req.query.datetime);
-    const yesterday = new Date(today - dayInMS);
-
-    if (!isValidDate(today)) {
-        return res.status(400).json({ error: 'Invalid date' });
-    }
-
-    if (isValidDate(yesterday) || dateOutOfRange(yesterday)) {
-        const startDate = getStartDate();
-        return res.status(200).json({ measurement: getCustomRange(today, startDate) });
-    }
-
-    return res.status(200).json({ measurement: getCustomRange(today, yesterday) });
-});
-
-/**
- * Gets the past week of data.
- *
- * @returns json
- */
-app.get('/week', (req, res) => {
-    const dayInMS = 1000 * 60 * 60 * 24;
-
-    const today = new Date(req.query.datetime);
-    const yesterday = new Date(today - dayInMS);
-
-    if (!isValidDate(today)) {
-        return res.status(400).json({ error: 'Invalid date' });
-    }
-
-    if (isValidDate(yesterday) || dateOutOfRange(yesterday)) {
-        const startDate = getStartDate();
-        return res.status(200).json({ measurement: getCustomRange(today, startDate) });
-    }
-
-    return res.status(200).json({ measurement: getCustomRange(today, yesterday) });
-});
-
-/**
- * Gets the past two weeks of data.
- *
- * @returns json
- */
-app.get('/twoweeks', (req, res) => {
-    const twoWeeksInMS = 1000 * 60 * 60 * 24 * 14;
-
-    const today = round(new Date());
-    const twoWeeks = new Date(today - twoWeeksInMS);
-
-    if (!isValidDate(today) || dateOutOfRange(today)) {
-        return res.status(400).json({ error: 'Invalid or out-of-range date' });
-    }
-
-    if (!isValidDate(twoWeeks) || dateOutOfRange(twoWeeks)) {
-        const startDate = getStartDate();
-        return res.status(200).json({ measurement: getCustomRange(today, startDate) });
-    }
-
-    return res.status(200).json({ measurement: getCustomRange(today, twoWeeks) });
-});
-
-/**
- * Gets a custom range of data.
- *
- * @param startTime Datetime as a string: 2026-01-07T23:50:00
- * @param endTime Datetime as a string: 2026-01-14T23:50:00
- * @returns json
- */
-app.get('/range', (req, res) => {
-    const start = new Date(req.query.start);
-    const end = new Date(req.query.end);
-
-    if (!isValidDate(start) || dateOutOfRange(start)) {
-        return res.status(400).json({ error: 'Invalid or out-of-range start date' });
-    }
-
-    if (!isValidDate(end) || dateOutOfRange(end)) {
-        const startDate = getStartDate();
-        return res.status(200).json({ measurement: getCustomRange(start, startDate) });
-    }
-
-    return res.status(200).json({ measurement: getCustomRange(start, end) });
-});
-
-app.post('/upload', (req,res)=>{
-    const { hiveID, timestamp, key, temperature } = req.body;
-    error = "";
-
-    if(!key){
-        return res.status(400).json({ error: 'Invalid Key'});
-    }
-    if(!isValidHive(hiveID)){
-        error = "hiveID is invalid";
-    }
-    if(!bl.isValidDate(timestamp)){
-        error = "timestamp is invalid";
-    }
-    if(isNum(temperature)){
-        error = "temperature is not a number";
-    }
-    
-    try{
-        insertTemp(hiveID,temperature,timestamp);
-    }catch(e){
-        error = ""+e;
-    }
-
-    if(error != ""){
-        return res.status(400).json({ error: error});
-    }
-    return res.status(400).json({ error: error});
-});
+if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  startServer().catch((error) => {
+    console.error("Failed to start backend:", error);
+    process.exit(1);
+  });
+}

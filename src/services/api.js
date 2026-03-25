@@ -1,4 +1,15 @@
-const API_BASE = 'http://localhost:3001';
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3001";
+
+async function getJson(path) {
+  const response = await fetch(`${API_BASE}${path}`);
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`API ${response.status}: ${text || response.statusText}`);
+  }
+
+  return response.json();
+}
 
 /**
  * Fetches the most recent reading (current state)
@@ -6,20 +17,11 @@ const API_BASE = 'http://localhost:3001';
  */
 export async function getCurrentReading() {
   try {
-    const response = await fetch(`${API_BASE}/two-weeks`);
-    const { data } = await response.json();
-    
-    if (!data || data.length === 0) {
-      throw new Error('No data available');
-    }
-    
-    // Get the most recent entry (last in array)
-    const latest = data[data.length - 1];
-    const [timestamp, tempC, humidity] = latest;
-    
+    const { timestamp, temperatureC, humidity } = await getJson("/measurement/latest");
+
     return {
       timestamp,
-      temperatureC: parseFloat(tempC),
+      temperatureC: parseFloat(temperatureC),
       humidity: parseFloat(humidity),
     };
   } catch (error) {
@@ -33,8 +35,7 @@ export async function getCurrentReading() {
  */
 export async function getDayData(date) {
   try {
-    const response = await fetch(`${API_BASE}/day/${date}`);
-    const { data } = await response.json();
+    const { data } = await getJson(`/day/${date}`);
     return data.map(([timestamp, tempC, humidity]) => ({
       timestamp,
       temperatureC: parseFloat(tempC),
@@ -51,8 +52,7 @@ export async function getDayData(date) {
  */
 export async function getTwoWeeksData() {
   try {
-    const response = await fetch(`${API_BASE}/two-weeks`);
-    const { data } = await response.json();
+    const { data } = await getJson("/two-weeks");
     return data.map(([timestamp, tempC, humidity]) => ({
       timestamp,
       temperatureC: parseFloat(tempC),
@@ -69,11 +69,10 @@ export async function getTwoWeeksData() {
  */
 export async function getMeasurement(datetime) {
   try {
-    const response = await fetch(`${API_BASE}/measurement/${datetime}`);
-    const { timestamp, temp, humidity } = await response.json();
+    const { timestamp, temperatureC, humidity } = await getJson(`/measurement/${datetime}`);
     return {
       timestamp,
-      temperatureC: parseFloat(temp),
+      temperatureC: parseFloat(temperatureC),
       humidity: parseFloat(humidity),
     };
   } catch (error) {

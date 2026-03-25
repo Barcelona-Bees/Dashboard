@@ -1,151 +1,31 @@
-const { login, getSessionToken } = require("../dataLinkLayer/login.js");
-const { getStartTime } = require("../dataLinkLayer/hiveUtils.js");
+export function parseHiveId(value) {
+  const raw = value ?? "1";
+  const hiveId = Number(raw);
 
-/**
- * Checks if login information is valid
- * 
- * @param username 
- * @param password 
- * @returns boolean
- */
-function isValidLogin(username, password){
-    return login(username, password);
+  if (!Number.isInteger(hiveId) || hiveId <= 0) {
+    throw new Error("hiveId must be a positive integer");
+  }
+
+  return hiveId;
 }
 
-/**
- * Checks if hive id is in the database
- * 
- * @param id
- * @returns boolean
- */
-function isValidHive(id){
-    let data = getStartTime(id);
-    if(data != "undefined"){
-        return true
-    }
+export function assertIsoDate(value, label = "date") {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(`${label} must be in YYYY-MM-DD format`);
+  }
+
+  return value;
 }
 
-/**
- * Checks if input is an integer
- * 
- * @param data - A number
- * @returns boolean
- */
-function isNum(data){
-    if(typeof(data)=="number")return true;
-    return false;
-}
+export function assertIsoDateTime(value, label = "datetime") {
+  if (typeof value !== "string") {
+    throw new Error(`${label} must be a string`);
+  }
 
-/**
- * Checks if input is a string
- * 
- * @param data - A string
- * @returns boolean
- */
-function isString(data){
-    return typeof(data) == "string";
-}
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`${label} must be a valid ISO datetime`);
+  }
 
-/**
- * Checks if date is valid
- * 
- * @param date - A js date string
- * @returns boolean
- */
-function isValidDate(hiveId, date){
-    if(isValidHive(hiveId) && isString(date)){
-        let x = new Date(date);
-        if(x == "undefined"){
-            return false;
-        }
-
-        let now = new Date();
-        let start = new Date(startTime(hiveId));
-
-        if(date<=now && date>=start){
-            return true;
-        }
-    }
-    return false;
-}
-
-/**
- * Checks if phone number is valid
- * 
- * @param num - A 10 digit phone number
- * @returns boolean
- */
-function isValidPhone(num){
-    let numStr = ""+num;
-    if(isNum(num) && numStr.length == 10){
-        return true;
-    }
-    return false;
-}
-
-/**
- * Checks if email is valid
- * 
- * @param email - A string
- * @returns boolean
- */
-function isValidEmail(email){
-    // const pattern = "/.*@.*/";
-    if(isString(email)){
-        let split = email.split("@");
-        if(split.length == 2)return true;
-    }
-    return false
-}
-
-/**
- * Checks if session token is Valid
- * 
- * @param token - Session token
- * @returns boolean
- */
-function isValidSessionToken(token){
-    return getSessionToken();
-}
-
-/**
- * Hashes input
- * 
- * @param data - String to be hashed
- * @returns hashed string
- */
-async function hash(data){
-
-}
-
-/**
- * Generates a new user token
- * 
- * @returns
- */
-function generateToken(){
-
-}
-
-/**
- * Sanitizes the given string
- * 
- * @param data - String to be sanitized 
- * @returns sanitized string
- */
-function sanitize(data){
-    
-}
-
-module.exports = {
-    isValidLogin,
-    isValidHive,
-    isNum,
-    isString,
-    isValidDate,
-    isValidPhone,
-    isValidEmail,
-    isValidSessionToken,
-    hash,
-    sanitize
+  return date.toISOString();
 }

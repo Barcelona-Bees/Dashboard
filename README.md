@@ -1,29 +1,51 @@
-# Barcelona Bees Dashboard (JS, single-page tabs) — Wireframe Match
+# Barcelona Bees Dashboard
 
-This is a **JavaScript (JSX)** Vite + React single-page dashboard that matches the provided wireframes:
-- Home (Current Readings)
-- Notifications (Alerts)
-- All Data (Historical data + Export modal)
-- Account
+This repo contains:
 
-**Important:** Charts are currently **wireframe placeholders** (grid + sample lines) so everything renders reliably.
-When you’re ready for real data, we can swap `ChartCard.jsx` to an accessible chart library (AG Charts, etc.) in ~5 minutes.
+- A Vite + React frontend at `src/`
+- A minimal Express + PostgreSQL backend at `src/backend/`
 
-## Run it locally
+## Local setup
+
+1. Copy the example env file:
+
+```bash
+cp .env.example .env
+```
+
+2. Create the database:
+
+```bash
+createdb barcelona_bees
+psql -d barcelona_bees -f src/backend/database/database_initial.sql
+psql -d barcelona_bees -f src/backend/database/initial_test.sql
+```
+
+3. Install dependencies if needed:
 
 ```bash
 npm install
+```
+
+4. Run backend and frontend together:
+
+```bash
+npm run dev:full
+```
+
+Or run them separately:
+
+```bash
+npm run dev:backend
 npm run dev
 ```
 
-Open the URL Vite prints (usually http://localhost:5173)
+Frontend: [http://localhost:5173](http://localhost:5173)
 
-## Notes
-- Login is a simple local toggle (stored in localStorage) so you can click through screens.
-- Data is placeholder in `src/data/fake.js` — swap with your real fake-data file later.
-- This project is intentionally **single page with tabs** (no router).
+Backend health check: [http://localhost:3001/health](http://localhost:3001/health)
 
+## Current state
 
-## Gauges & charts
-- Gauges are dial-style with colored target bands + a needle.
-- Charts support hover, drag-to-scrub, and keyboard (Left/Right) to inspect points.
+- Login is still a frontend-only placeholder.
+- Alerts and several dashboard values still use synthetic or derived data.
+- The backend currently serves temperature and humidity history for a single hive workflow.

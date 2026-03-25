@@ -1,73 +1,89 @@
-import {
-    app,
-    init,
-    measurementHandler,
-    dayHandler,
-    twoWeeksHandler,
-    verifyHandler,
-} from "../appLayer/al.js";
+import { createHandlers } from "../appLayer/al.js";
 
-beforeAll(async () => {
-    await init();
-});
-
-function mockRes() {
-    return { json: jest.fn() };
+function createMockResponse() {
+  return {
+    statusCode: 200,
+    payload: undefined,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.payload = body;
+      return this;
+    },
+  };
 }
 
-describe('GET /verify', ()=>{
-    test("Verify the whole CSV is read", ()=>{
-        const res = mockRes();
-        verifyHandler({ params: {} }, res);
-        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ hiveData: expect.any(Array) }));
-        expect(res.json.mock.calls[0][0].hiveData.length).toBe(2016);
-    });
-})
+function buildStore() {
+  const rows = [
+    { timestamp: "2026-03-13T00:00:00.000Z", temperatureC: 18.1, humidity: 55 },
+    { timestamp: "2026-03-13T12:00:00.000Z", temperatureC: 19.4, humidity: 58 },
+    { timestamp: "2026-03-14T23:50:00.000Z", temperatureC: 20.2, humidity: 61 },
+  ];
 
-describe('GET /measurement/:datetime', ()=>{
-    test("Get a valid measurement from the database", ()=>{
-        const res = mockRes();
-        measurementHandler({ params: { datetime: "2026-01-14T23:50:00" } }, res);
-        expect(res.json).toHaveBeenCalledWith({ timestamp: "2026-01-14T23:50:00", temp: "34.66", humidity: "58.87" });
-    });
-    test("Try to get a measurement not in the database", ()=>{
-        const res = mockRes();
-        measurementHandler({ params: { datetime: "9999-12-31T23:50:00" } }, res);
-        expect(res.json).toHaveBeenCalledWith({ timestamp: "9999-12-31T23:50:00", temp: "0", humidity: "0" });
-    });
-    test("Try to get a measurement formatted wrong", ()=>{
-        const res = mockRes();
-        measurementHandler({ params: { datetime: "notADate" } }, res);
-        expect(res.json).toHaveBeenCalledWith({ timestamp: "notADate", temp: "0", humidity: "0" });
-    });
-});
-describe('GET /day/:date', ()=>{
-    test("Get a valid date of information from the database", ()=>{
-        const res = mockRes();
-        dayHandler({ params: { date: "2026-01-14" } }, res);
-        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ date: "2026-01-14", data: expect.any(Array) }));
-        const body = res.json.mock.calls[0][0];
-        expect(body.data.length).toBe(144);
-        expect(body.data[0]).toEqual(["2026-01-14T00:00:00","34.78","60.12"]);
-        expect(body.data[143]).toEqual(["2026-01-14T23:50:00","34.66","58.87"]);
-    });
-    test("Get an invalid date of information from the database", ()=>{
-        const res = mockRes();
-        dayHandler({ params: { date: "9999-12-31" } }, res);
-        expect(res.json.mock.calls[0][0].data.length).toBe(0);
-    });
-    test("Get an invalidly formatted date from the database", ()=>{
-        const res = mockRes();
-        dayHandler({ params: { date: "notADate" } }, res);
-        expect(res.json.mock.calls[0][0].data.length).toBe(0);
-    });
-});
+  return {
+    async getLatestMeasurement() {
+      return rows.at(-1);
+    },
+    async getMeasurementByTimestamp(_hiveId, timestamp) {
+      return rows.find((row) => row.timestamp === timestamp) ?? null;
+    },
+    async getMeasurementsBetween(_hiveId, start, end) {
+      return rows.filter((row) => row.timestamp >= start && row.timestamp <= end);
+    },
+  };
+}
 
-describe('GET /two-weeks', ()=>{
-    test("Get the previous two weeks of information from the database", ()=>{
-        const res = mockRes();
-        twoWeeksHandler({ params: {} }, res);
-        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: expect.any(Array) }));
-        expect(res.json.mock.calls[0][0].data.length).toBe(2016);
+describe("backend application routes", () => {
+  test("GET /measurement/latest returns the latest measurement", async () => {
+    const handlers = createHandlers(buildStore());
+    const res = createMockResponse();
+
+    await handlers.latestMeasurementHandler({ query: {} }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual({
+      timestamp: "2026-03-14T23:50:00.000Z",
+      temperatureC: 20.2,
+      humidity: 61,
     });
+  });
+
+  test("GET /day/:date returns rows for that day", async () => {
+    const handlers = createHandlers(buildStore());
+    const res = createMockResponse();
+
+    await handlers.dayHandler({ params: { date: "2026-03-14" }, query: {} }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toEqual({
+      date: "2026-03-14",
+      data: [["2026-03-14T23:50:00.000Z", "20.2", "61"]],
+    });
+  });
+
+  test("GET /two-weeks returns normalized data rows", async () => {
+    const handlers = createHandlers(buildStore());
+    const res = createMockResponse();
+
+    await handlers.twoWeeksHandler({ query: {} }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.payload.data).toEqual([
+      ["2026-03-13T00:00:00.000Z", "18.1", "55"],
+      ["2026-03-13T12:00:00.000Z", "19.4", "58"],
+      ["2026-03-14T23:50:00.000Z", "20.2", "61"],
+    ]);
+  });
+
+  test("GET /measurement/:datetime validates bad input", async () => {
+    const handlers = createHandlers(buildStore());
+    const res = createMockResponse();
+
+    await handlers.measurementHandler({ params: { datetime: "not-a-date" }, query: {} }, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.payload.error).toMatch(/valid ISO datetime/i);
+  });
 });

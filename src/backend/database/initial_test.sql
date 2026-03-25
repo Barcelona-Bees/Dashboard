@@ -1,50 +1,43 @@
-USE BarcBees;
+INSERT INTO users (username, password, email, phone, datastartdate)
+VALUES
+  ('admin', 'admin', 'admin@admin.com', '5555555555', '2026-03-01T00:00:00Z');
 
-INSERT into Users (userID, username, password, email, phone, dataStartDate)
-	VALUES(1, 'Admin', 'Admin', 'admin@admin.com', NULL, date(now()) );
-    
-INSERT into Users (username, password, email, phone, dataStartDate)
-	VALUES(2,'test', 'test', 'test@test.com', NULL, date(now()) );
-    
-INSERT INTO Hive (hiveid, name, zipcode, passkey, startDate)
-		VALUES (1,'hive','14623','ofuscated for github',NOW());
-	
-INSERT INTO Notify(userID, notifType, temp, humidity, carbonDioxide, swarm)
-	VALUES(1, 'both', true, true, true, true);
-    
-INSERT INTO Temperature(timestamp, reading)
-	VALUES(date(now()), 18.2);
-      
-INSERT INTO Temperature(timestamp, reading)
-	VALUES('2026-02-01 12:00:00', 18.2),
-	('2026-02-01 12:10:00', 18.7),
-	('2026-02-01 12:20:00', 20.2),
-	('2026-02-01 12:30:00', 21.2),
-	('2026-02-01 12:40:00', 21.4),
-	('2026-02-01 12:50:00', 21.7);
-    
-INSERT INTO OutsideTemp(timestamp, reading)
-	VALUES(date(now), 19.2);
-    
-INSERT INTO CarbonDioxide(timestamp, reading)
-	VALUES(date(now), 10.0);
-    
-INSERT INTO Humidity(timestamp, reading)
-	VALUES(date(now), 40.1);
+INSERT INTO hive (name, zipcode, startdate, passkey)
+VALUES
+  ('Barcelona Hive 1', '14623', '2026-03-01T00:00:00Z', 'local-dev-passkey');
 
--- Not sure good data
-INSERT INTO OutsidePressure(timestamp, reading)
-	VALUES(date(now), 10);
+INSERT INTO userhives (userid, hiveid)
+VALUES
+  (1, 1);
 
--- Get Datas
-SELECT * FROM Temperature;
-select * from Temperature where timestamp like '%2026-02-01%';
+INSERT INTO notify (userid, notiftype, temp, humidity, carbondioxide, swarm)
+VALUES
+  (1, 'both', TRUE, TRUE, TRUE, FALSE);
 
-SELECT * FROM User;
+WITH series AS (
+  SELECT generate_series(
+    TIMESTAMPTZ '2026-03-01T00:00:00Z',
+    TIMESTAMPTZ '2026-03-14T23:50:00Z',
+    INTERVAL '10 minutes'
+  ) AS ts
+)
+INSERT INTO temperature (hiveid, timestamp, reading)
+SELECT
+  1,
+  ts,
+  ROUND((18 + SIN(EXTRACT(EPOCH FROM ts) / 86400) * 4)::numeric, 2)
+FROM series;
 
-SELECT * FROM Hive;
-
-
-
-
-select * from User
+WITH series AS (
+  SELECT generate_series(
+    TIMESTAMPTZ '2026-03-01T00:00:00Z',
+    TIMESTAMPTZ '2026-03-14T23:50:00Z',
+    INTERVAL '10 minutes'
+  ) AS ts
+)
+INSERT INTO humidity (hiveid, timestamp, reading)
+SELECT
+  1,
+  ts,
+  ROUND((55 + SIN(EXTRACT(EPOCH FROM ts) / 43200) * 8)::numeric, 2)
+FROM series;
