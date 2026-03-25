@@ -48,6 +48,16 @@ function isString(data) {
 }
 
 /**
+ * True if value is a Date instance and is not NaN.
+ *
+ * @param d
+ * @returns boolean
+ */
+function isValidDateValue(d) {
+    return d instanceof Date && !Number.isNaN(d.getTime());
+}
+
+/**
  * Checks if date is valid for the hive (between hive start and now)
  *
  * @param hiveId
@@ -138,6 +148,7 @@ export {
     isValidHive,
     isNum,
     isString,
+    isValidDateValue,
     isValidDate,
     isValidPhone,
     isValidEmail,

@@ -3,7 +3,9 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
-import { getData, insertData, runDirectSQLwithPrepared } from "../dataLinkLayer/dbutils.js";
+import { insertData, runDirectSQLwithPrepared } from "../dataLinkLayer/dbutils.js";
+import { getStartTime, testPasskey } from "../dataLinkLayer/hiveUtils.js";
+import { isNum, isString, isValidDateValue } from "../busLayer/utils.js";
 
 /** True when this file is the process entrypoint (not when Jest or another module imports it). */
 const isMainModule =
@@ -31,22 +33,17 @@ function round(date) {
     return new Date(Math.floor(date.getTime() / ms) * ms);
 }
 
-function isValidDateValue(d) {
-    return d instanceof Date && !Number.isNaN(d.getTime());
-}
-
-function isNum(data) {
-    return typeof data === "number";
-}
-
-async function isValidHive(id) {
-    const data = await getData("hive", ["hiveID"], { hiveID: id });
-    return (data.rows?.length ?? 0) > 0;
+function toNumericReading(value) {
+    if (isNum(value) && Number.isFinite(value)) return value;
+    if (isString(value)) {
+        const n = Number(value);
+        if (Number.isFinite(n)) return n;
+    }
+    return null;
 }
 
 async function getHiveStartDate(hiveID = DEFAULT_HIVE_ID) {
-    const data = await getData("hive", ["startdate"], { hiveID });
-    const row = data.rows?.[0];
+    const row = await getStartTime(hiveID);
     if (!row?.startdate) return new Date(0);
     return new Date(row.startdate);
 }
@@ -239,26 +236,28 @@ app.get("/range", async (req, res) => {
 });
 
 app.post("/upload", async (req, res) => {
-    const { hiveID, timestamp, key, temperature } = req.body;
+    const { reading, timestamp, passkey } = req.body;
 
-    if (!key) {
-        return res.status(400).json({ error: "Invalid Key" });
+    if (!passkey) {
+        return res.status(400).json({ error: "Invalid passkey" });
     }
-    if (!(await isValidHive(hiveID))) {
-        return res.status(400).json({ error: "hiveID is invalid" });
+    const hiveID = await testPasskey(passkey);
+    if (hiveID === -1) {
+        return res.status(400).json({ error: "Invalid passkey" });
     }
     const ts = timestamp instanceof Date ? timestamp : new Date(timestamp);
     if (!isValidDateValue(ts)) {
         return res.status(400).json({ error: "timestamp is invalid" });
     }
-    if (!isNum(temperature)) {
-        return res.status(400).json({ error: "temperature is not a number" });
+    const readingNum = toNumericReading(reading);
+    if (readingNum === null) {
+        return res.status(400).json({ error: "reading is not a number" });
     }
 
     try {
         await insertData("Temperature", {
             hiveID,
-            reading: temperature,
+            reading: readingNum,
             timestamp: ts,
         });
     } catch (e) {
