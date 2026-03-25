@@ -92,6 +92,19 @@ async function getLastTemp(){
 }
 
 /**
+ * Exact match for one Temperature row at (hiveID, timestamp).
+ *
+ * @param {number} hiveID
+ * @param {Date} timestamp
+ */
+async function getTemperatureReadingAt(hiveID, timestamp) {
+    return await dbutils.getData("Temperature", ["reading"], {
+        hiveID,
+        timestamp,
+    });
+}
+
+/**
  * Latest temperature reading for a hive (row with max timestamp).
  *
  * @param {number} hiveID
@@ -127,5 +140,6 @@ async function getCustomRange(hiveID, startDate, endDate){
 export {
     getCustomRange,
     getLatestTemperatureReading,
+    getTemperatureReadingAt,
     insertTemp,
 };

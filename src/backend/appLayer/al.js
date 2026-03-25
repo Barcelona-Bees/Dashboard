@@ -3,9 +3,13 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
-import { insertData, getData } from "../dataLinkLayer/dbutils.js";
 import { getStartTime, testPasskey } from "../dataLinkLayer/hiveUtils.js";
-import { getCustomRange, getLatestTemperatureReading } from "../dataLinkLayer/temp.js";
+import {
+    getCustomRange,
+    getLatestTemperatureReading,
+    getTemperatureReadingAt,
+    insertTemp,
+} from "../dataLinkLayer/temp.js";
 import { isValidDateValue, toNumericReading } from "../busLayer/utils.js";
 
 /** True when this file is the process entrypoint (not when Jest or another module imports it). */
@@ -59,10 +63,7 @@ app.get("/measurement", async (req, res) => {
         return res.status(400).json({ error: "Invalid or out-of-range date" });
     }
 
-    const result = await getData("Temperature", ["reading"], {
-        hiveID: DEFAULT_HIVE_ID,
-        timestamp,
-    });
+    const result = await getTemperatureReadingAt(DEFAULT_HIVE_ID, timestamp);
     const measurement = result.rows?.[0]?.reading ?? null;
     return res.status(200).json({ measurement });
 });
@@ -120,23 +121,24 @@ app.get("/day", async (req, res) => {
 });
 
 /**
- * Gets the past week of data.
+ * Gets roughly the past 7 days of data ending at datetime (same window logic as /day, but 7 days).
  *
  * @returns json
  */
 app.get("/week", async (req, res) => {
     const dayInMS = 1000 * 60 * 60 * 24;
+    const weekInMS = 7 * dayInMS;
 
     const today = new Date(req.query.datetime);
-    const yesterday = new Date(today - dayInMS);
+    const weekAgo = new Date(today - weekInMS);
 
     if (!isValidDateValue(today)) {
         return res.status(400).json({ error: "Invalid date" });
     }
 
     if (
-        !isValidDateValue(yesterday) ||
-        (await dateOutOfRange(yesterday))
+        !isValidDateValue(weekAgo) ||
+        (await dateOutOfRange(weekAgo))
     ) {
         const startDate = await getHiveStartDate(DEFAULT_HIVE_ID);
         const measurement = await getCustomRange(
@@ -149,7 +151,7 @@ app.get("/week", async (req, res) => {
 
     const measurement = await getCustomRange(
         DEFAULT_HIVE_ID,
-        yesterday,
+        weekAgo,
         today
     );
     return res.status(200).json({ measurement });
@@ -203,10 +205,21 @@ app.get("/range", async (req, res) => {
         return res.status(400).json({ error: "Invalid or out-of-range start date" });
     }
 
-    if (!isValidDateValue(end) || (await dateOutOfRange(end))) {
-        const startDate = await getHiveStartDate(DEFAULT_HIVE_ID);
-        const lo = new Date(Math.min(startDate.getTime(), start.getTime()));
-        const hi = new Date(Math.max(startDate.getTime(), start.getTime()));
+    if (!isValidDateValue(end)) {
+        return res.status(400).json({ error: "Invalid end date" });
+    }
+
+    if (await dateOutOfRange(end)) {
+        const hiveStart = await getHiveStartDate(DEFAULT_HIVE_ID);
+        const now = new Date();
+        let endClamped = end;
+        if (end.getTime() > now.getTime()) {
+            endClamped = now;
+        } else if (end.getTime() < hiveStart.getTime()) {
+            endClamped = hiveStart;
+        }
+        const lo = new Date(Math.min(start.getTime(), endClamped.getTime()));
+        const hi = new Date(Math.max(start.getTime(), endClamped.getTime()));
         const measurement = await getCustomRange(DEFAULT_HIVE_ID, lo, hi);
         return res.status(200).json({ measurement });
     }
@@ -237,11 +250,7 @@ app.post("/upload", async (req, res) => {
     }
 
     try {
-        await insertData("Temperature", {
-            hiveID,
-            reading: readingNum,
-            timestamp: ts,
-        });
+        await insertTemp(hiveID, readingNum, ts);
     } catch (e) {
         return res.status(500).json({ error: "" + e });
     }
