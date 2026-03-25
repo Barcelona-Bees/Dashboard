@@ -92,6 +92,17 @@ async function getLastTemp(){
 }
 
 /**
+ * Latest temperature reading for a hive (row with max timestamp).
+ *
+ * @param {number} hiveID
+ */
+async function getLatestTemperatureReading(hiveID) {
+    const sql =
+        "SELECT reading FROM Temperature WHERE hiveID = $1 ORDER BY timestamp DESC LIMIT 1";
+    return await dbutils.runDirectSQLwithPrepared(sql, [hiveID]);
+}
+
+/**
  * Returns the temperatures between the startDate and endDate for given hiveID
  * 
  * 
@@ -115,5 +126,6 @@ async function getCustomRange(hiveID, startDate, endDate){
 
 export {
     getCustomRange,
+    getLatestTemperatureReading,
     insertTemp,
 };

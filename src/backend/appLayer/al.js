@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { insertData, getData } from "../dataLinkLayer/dbutils.js";
 import { getStartTime, testPasskey } from "../dataLinkLayer/hiveUtils.js";
-import { getCustomRange } from "../dataLinkLayer/temp.js";
+import { getCustomRange, getLatestTemperatureReading } from "../dataLinkLayer/temp.js";
 import { isValidDateValue, toNumericReading } from "../busLayer/utils.js";
 
 /** True when this file is the process entrypoint (not when Jest or another module imports it). */
@@ -68,23 +68,18 @@ app.get("/measurement", async (req, res) => {
 });
 
 /**
- * Gets most recent timestamp of data.
+ * Gets the most recent temperature reading for the hive (latest row by timestamp).
  *
  * @returns json
  */
 app.get("/measurement/latest", async (req, res) => {
-    const timestamp = round(new Date());
-
-    if (!isValidDateValue(timestamp) || (await dateOutOfRange(timestamp))) {
-        return res.status(400).json({ error: "Invalid or out-of-range date" });
+    try {
+        const result = await getLatestTemperatureReading(DEFAULT_HIVE_ID);
+        const measurement = result.rows?.[0]?.reading ?? null;
+        return res.status(200).json({ measurement });
+    } catch (e) {
+        return res.status(500).json({ error: String(e) });
     }
-
-    const result = await getData("Temperature", ["reading"], {
-        hiveID: DEFAULT_HIVE_ID,
-        timestamp,
-    });
-    const measurement = result.rows?.[0]?.reading ?? null;
-    return res.status(200).json({ measurement });
 });
 
 /**
