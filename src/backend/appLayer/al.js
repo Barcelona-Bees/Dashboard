@@ -7,10 +7,12 @@ import { getStartTime, testPasskey } from "../dataLinkLayer/hiveUtils.js";
 import {
     getCustomRange,
     getLatestTemperatureReading,
+    getTempMeasurement,
     getTemperatureReadingAt,
     insertTemp,
 } from "../dataLinkLayer/temp.js";
 import { isValidDateValue, toNumericReading } from "../busLayer/utils.js";
+import { time } from "node:console";
 
 /** True when this file is the process entrypoint (not when Jest or another module imports it). */
 const isMainModule =
@@ -57,13 +59,21 @@ async function dateOutOfRange(d) {
  * @returns json
  */
 app.get("/measurement", async (req, res) => {
-    const timestamp = new Date(req.query.datetime);
+    const datetime = req.query.datetime;
+    
+    console.log(datetime);
+    const timestamp = new Date(datetime);
 
+    let timeOf = timestamp.getTime()/1000;
+
+    console.log("this is the ts", timestamp)
     if (!isValidDateValue(timestamp) || (await dateOutOfRange(timestamp))) {
         return res.status(400).json({ error: "Invalid or out-of-range date" });
     }
 
-    const result = await getTemperatureReadingAt(DEFAULT_HIVE_ID, timestamp);
+    const result = await getTempMeasurement(DEFAULT_HIVE_ID, timeOf);
+    console.log(result);
+
     const measurement = result.rows?.[0]?.reading ?? null;
     return res.status(200).json({ measurement });
 });
@@ -278,6 +288,7 @@ if (isMainModule) {
     server.once("listening", () => {
         const addr = server.address();
         const host = typeof addr === "object" && addr ? addr.address : "localhost";
+        // const host = typeof addr === "object" && addr ? addr.address : "https://barcbees.webdev.gccis.rit.edu/";
         const port = typeof addr === "object" && addr ? addr.port : PORT;
         console.log(`Backend listening on http://${host === "::" ? "localhost" : host}:${port}`);
     });

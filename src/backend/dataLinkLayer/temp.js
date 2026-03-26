@@ -141,8 +141,9 @@ async function getCustomRange(hiveID, startDate, endDate){
  */
 async function getTempMeasurement(hiveID, timestamp, measurement = 'day') {
     const sql =
-        "SELECT timestamp, reading FROM Temperature WHERE hiveID = $1, DATE_TRUNC('$2',timestamp) = '$3'";
-    return await dbutils.runDirectSQLwithPrepared(sql, [hiveID,timestamp, measurement]);
+        "SELECT timestamp, reading FROM Temperature WHERE hiveID = $1 AND DATE_TRUNC($2,timestamp) = TO_TIMESTAMP($3)";
+        // console.log(timestamp);
+    return await dbutils.runDirectSQLwithPrepared(sql, [hiveID, measurement, timestamp]);
 }
 
 // await getLastTemp();
