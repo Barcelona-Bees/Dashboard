@@ -111,7 +111,7 @@ async function getTemperatureReadingAt(hiveID, timestamp) {
  */
 async function getLatestTemperatureReading(hiveID) {
     const sql =
-        "SELECT reading FROM Temperature WHERE hiveID =siteinfo=> SELECT * FROM temperature where timestamp = '2026-03- $1 ORDER BY timestamp DESC LIMIT 1";
+    "SELECT * FROM TEMPERATURE WHERE HIVEID = $1 AND tempid = (SELECT MAX(tempid) from Temperature where HIVEID = $1);";
     return await dbutils.runDirectSQLwithPrepared(sql, [hiveID]);
 }
 
