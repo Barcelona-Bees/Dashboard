@@ -1,83 +1,87 @@
-const API_BASE = 'http://localhost:3001';
+const API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE) ||
+  "http://localhost:3001";
+
+const DEFAULT_HUMIDITY = 60;
+
+function measurementRows(json) {
+  const raw = json?.measurement;
+  if (!raw) return [];
+  if (Array.isArray(raw.rows)) return raw.rows;
+  if (Array.isArray(raw)) return raw;
+  return [];
+}
+
+function rowToPoint(row) {
+  const ts = row.timestamp;
+  const reading = row.reading;
+  return {
+    timestamp: ts instanceof Date ? ts.toISOString() : String(ts),
+    temperatureC: reading != null ? parseFloat(reading) : NaN,
+    humidity: DEFAULT_HUMIDITY,
+  };
+}
 
 /**
  * Fetches the most recent reading (current state)
- * Uses the latest timestamp from two-weeks data
+ * Uses the latest row from two-weeks data
  */
 export async function getCurrentReading() {
-  try {
-    const response = await fetch(`${API_BASE}/two-weeks`);
-    const { data } = await response.json();
-    
-    if (!data || data.length === 0) {
-      throw new Error('No data available');
-    }
-    
-    // Get the most recent entry (last in array)
-    const latest = data[data.length - 1];
-    const [timestamp, tempC, humidity] = latest;
-    
-    return {
-      timestamp,
-      temperatureC: parseFloat(tempC),
-      humidity: parseFloat(humidity),
-    };
-  } catch (error) {
-    console.error('Failed to fetch current reading:', error);
-    throw error;
+  const response = await fetch(`${API_BASE}/twoweeks`);
+  if (!response.ok) {
+    throw new Error(`GET /twoweeks failed: ${response.status}`);
   }
+  const json = await response.json();
+  const rows = measurementRows(json);
+  if (rows.length === 0) {
+    throw new Error("No data available");
+  }
+  const latest = rows[rows.length - 1];
+  return rowToPoint(latest);
 }
 
 /**
  * Fetches all data for a specific day
  */
 export async function getDayData(date) {
-  try {
-    const response = await fetch(`${API_BASE}/day/${date}`);
-    const { data } = await response.json();
-    return data.map(([timestamp, tempC, humidity]) => ({
-      timestamp,
-      temperatureC: parseFloat(tempC),
-      humidity: parseFloat(humidity),
-    }));
-  } catch (error) {
-    console.error('Failed to fetch day data:', error);
-    throw error;
+  const dt = `${date}T12:00:00`;
+  const response = await fetch(
+    `${API_BASE}/day?datetime=${encodeURIComponent(dt)}`
+  );
+  if (!response.ok) {
+    throw new Error(`GET /day failed: ${response.status}`);
   }
+  const json = await response.json();
+  return measurementRows(json).map(rowToPoint);
 }
 
 /**
  * Fetches past two weeks of data
  */
 export async function getTwoWeeksData() {
-  try {
-    const response = await fetch(`${API_BASE}/two-weeks`);
-    const { data } = await response.json();
-    return data.map(([timestamp, tempC, humidity]) => ({
-      timestamp,
-      temperatureC: parseFloat(tempC),
-      humidity: parseFloat(humidity),
-    }));
-  } catch (error) {
-    console.error('Failed to fetch two weeks data:', error);
-    throw error;
+  const response = await fetch(`${API_BASE}/twoweeks`);
+  if (!response.ok) {
+    throw new Error(`GET /twoweeks failed: ${response.status}`);
   }
+  const json = await response.json();
+  return measurementRows(json).map(rowToPoint);
 }
 
 /**
  * Fetches a single measurement by datetime
  */
 export async function getMeasurement(datetime) {
-  try {
-    const response = await fetch(`${API_BASE}/measurement/${datetime}`);
-    const { timestamp, temp, humidity } = await response.json();
-    return {
-      timestamp,
-      temperatureC: parseFloat(temp),
-      humidity: parseFloat(humidity),
-    };
-  } catch (error) {
-    console.error('Failed to fetch measurement:', error);
-    throw error;
+  const response = await fetch(
+    `${API_BASE}/measurement?datetime=${encodeURIComponent(datetime)}`
+  );
+  if (!response.ok) {
+    throw new Error(`GET /measurement failed: ${response.status}`);
   }
+  const json = await response.json();
+  const reading = json.measurement;
+  return {
+    timestamp: datetime,
+    temperatureC: reading != null ? parseFloat(reading) : NaN,
+    humidity: DEFAULT_HUMIDITY,
+  };
 }

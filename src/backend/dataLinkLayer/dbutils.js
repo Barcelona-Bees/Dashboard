@@ -1,26 +1,16 @@
-// const { Client } = require('pg');
-import { Client} from 'pg';
-// const { param } = require('../routes/auth');
-      
-const client = new Client({
-  host: 'localhost',
-  database: 'siteinfo',
-  user: 'student',
-  password: 'student',
+import { Pool } from "pg";
+
+const pool = new Pool({
+  host: "localhost",
+  database: "siteinfo",
+  user: "student",
+  password: "student",
   port: 5432,
 });
 
-// async function connectClient(){
-// // establish database connection
-//   client.connect();
-// } 
-
-// async function disconnectClient(){
-//   client.end();
-// }
-
-// establish database connection
-client.connect();
+pool.on("error", (err) => {
+  console.error("[dbutils] Pool error:", err.message);
+});
 /**
  * 
  * A generic SELECT statement function that takes in a single table as a string, columns in the form of an array of strings,
@@ -35,8 +25,10 @@ client.connect();
  */
 async function getData( table, columns = `*`, criteria = null) {
     try {
-        const qryColumns  = columns.join(),
-          critList = [],
+        const qryColumns = Array.isArray(columns)
+            ? columns.join(", ")
+            : String(columns);
+        const critList = [],
           paramList = [];
 
         if(criteria != null){
@@ -52,15 +44,17 @@ async function getData( table, columns = `*`, criteria = null) {
           
         const qryCriteria = ( critList.length ) ? `WHERE ${ critList.join( ` AND ` ) }` : ``,
               qryString = `SELECT ${ qryColumns } FROM ${ table } ${ qryCriteria }`;
-        console.log( qryString );
+        if (process.env.DEBUG_DB) {
+          console.log(qryString);
+        }
 
         var queryResult;
 
         if (paramList.length > 0){
-          queryResult = await client.query( qryString, paramList );
+          queryResult = await pool.query( qryString, paramList );
         }
         else{
-          queryResult = await client.query( qryString );
+          queryResult = await pool.query( qryString );
         }
 
         // console.log("query results", queryResult);
@@ -96,39 +90,30 @@ async function insertData( table, columnsAndValues, returnID = false){
     let tempIndex = 1;
 
     Object.entries( columnsAndValues ).forEach( ( crit ) => {
-      qryColumns.push( `${crit[0]} `);
-      qryValues.push (`$${tempIndex}`);
+      qryColumns.push(crit[0]);
+      qryValues.push(`$${tempIndex}`);
       qryParams.push(crit[1]);
       tempIndex++;
     });
 
-    var colString = ``;
-    var valString = ``;
-
-    const size = qryColumns.length;
-    if(size > 0){
-      colString = `${qryColumns[0]}`;
-      valString = `${qryValues[0]}`;
-
-      for(let i = 1; i < size; i++){
-        colString.concat(` , `,qryColumns[i]);
-        valString.concat(` , `,qryValues[i]);
-      }
-    }
+    const colString = qryColumns.join(", ");
+    const valString = qryValues.join(", ");
 
     let qryString;
 
     if (returnID) {  
-      qryString = `INSERT INTO ${ table } ( ${ qryColumns } ) VALUES ( ${ qryValues }) RETURNING ID`;
+      qryString = `INSERT INTO ${ table } ( ${ colString } ) VALUES ( ${ valString }) RETURNING ID`;
     } else {
-      qryString = `INSERT INTO ${ table } ( ${ qryColumns } ) VALUES ( ${ qryValues })`;
+      qryString = `INSERT INTO ${ table } ( ${ colString } ) VALUES ( ${ valString })`;
     }
 
 
 
-    console.log( qryString );
+    if (process.env.DEBUG_DB) {
+      console.log(qryString);
+    }
 
-    const queryResult = await client.query( qryString , qryParams);
+    const queryResult = await pool.query( qryString , qryParams);
 
     //Returns JSON
     return queryResult;
@@ -194,9 +179,11 @@ async function updateData( table, columnsAndValues, criteria){
       qryString = `UPDATE ${ table } SET ${ setString } ${qryCriteria}`;
 
 
-    console.log( qryString + "\n" + params);
+    if (process.env.DEBUG_DB) {
+      console.log(qryString + "\n" + params);
+    }
 
-    const queryResult = await client.query( qryString , params);
+    const queryResult = await pool.query( qryString , params);
 
     //Returns JSON
     return queryResult;
@@ -217,7 +204,9 @@ async function updateData( table, columnsAndValues, criteria){
  */
 async function getDataMulti( table, columns = `*`, criteria ) {
   try {
-      const qryColumns  = columns.join(),
+      const qryColumns = Array.isArray(columns)
+          ? columns.join(", ")
+          : String(columns),
             critList = [];
 
       Object.entries( criteria ).forEach( ( crit ) => {
@@ -228,7 +217,7 @@ async function getDataMulti( table, columns = `*`, criteria ) {
             qryString = `SELECT ${ qryColumns } FROM ${ table } ${ qryCriteria }`;
       // console.log( qryString );
 
-      const queryResult = await client.query( qryString );
+      const queryResult = await pool.query( qryString );
 
       //Returns JSON
       return queryResult.rows;
@@ -248,7 +237,7 @@ async function getDataMulti( table, columns = `*`, criteria ) {
  * @returns 
  */
 export async function runDirectSQL(sql){
-  return await client.query( sql );
+  return await pool.query( sql );
 }
 
 /**
@@ -261,15 +250,15 @@ export async function runDirectSQL(sql){
  * @returns 
  */
 async function runDirectSQLwithPrepared(sql, params){
-  return await client.query( sql, params)
+  return await pool.query( sql, params)
 }
 /**
- * Start a transaction
- * 
- * @returns 
+ * Start a transaction (uses a pool connection; for multi-statement transactions use pool.connect() and one client).
+ *
+ * @returns
  */
 async function startTransaction(){
-  return await client.query('BEGIN');
+  return await pool.query('BEGIN');
 }
 
 /**
@@ -280,7 +269,7 @@ async function startTransaction(){
  * 
  */
 async function commitTransaction(){
-  return await client.query('COMMIT');
+  return await pool.query('COMMIT');
 }
 
 /**
@@ -290,7 +279,7 @@ async function commitTransaction(){
  * @returns 
  */
 async function rollbackTransaction(){
-  return await client.query('ROLLBACK');
+  return await pool.query('ROLLBACK');
 }
 
 export {
