@@ -108,7 +108,8 @@ app.get("/temp/measurement/latest", async (req, res) => {
     try {
         const result = await getLatestTemperatureReading(DEFAULT_HIVE_ID);
         const measurement = result.rows?.[0]?.reading ?? null;
-        return res.status(200).json({ measurement });
+        const timestamp = result.rows?.[0]?.timestamp ?? null;
+        return res.status(200).json({ measurement, timestamp });
     } catch (e) {
         return res.status(500).json({ error: String(e) });
     }
