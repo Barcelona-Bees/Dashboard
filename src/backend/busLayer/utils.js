@@ -142,7 +142,16 @@ async function isValidSessionToken(token) {
  * @param data - String to be hashed
  * @returns hashed string
  */
-async function hash(data) {}
+async function hashPassword(password) {
+    const salt = "Q_4EZWSLA^NBg4<bETXU?PA]chFF9d@iHPAdW=NXbaNB<Z5=jW4iCPi3XPiN@IT66P:lW]?aKnOLj?;Y6:=P9R7<Ua3A9l=nN["
+    bcrypt.hash(password, salt, function(err, hash) {
+        if (err) {
+            console.error(err);
+            return;
+        }
+    });
+    return hash;
+}
 
 /**
  * Generates a new user token
@@ -170,7 +179,7 @@ export {
     isValidPhone,
     isValidEmail,
     isValidSessionToken,
-    hash,
+    hashPassword,
     sanitize,
     generateToken,
 };
