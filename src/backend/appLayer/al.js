@@ -9,6 +9,7 @@ import {
     getLatestTemperatureReading,
     getTempMeasurement,
     getTemperatureReadingAt,
+    insertHumidity,
     insertTemp,
 } from "../dataLinkLayer/temp.js";
 import { isValidDateValue, toNumericReading } from "../busLayer/utils.js";
@@ -261,6 +262,40 @@ app.post("/upload", async (req, res) => {
 
     try {
         await insertTemp(hiveID, readingNum, ts);
+    } catch (e) {
+        return res.status(500).json({ error: "" + e });
+    }
+
+    return res.status(200).json({ success: true });
+});
+
+app.post("/upload2/", async (req, res) => {
+    const { temp, humidty, timestamp, passkey } = req.body;
+
+    if (!passkey) {
+        return res.status(400).json({ error: "Invalid passkey" });
+    }
+    const hiveID = await testPasskey(passkey);
+    if (hiveID === -1) {
+        return res.status(400).json({ error: "Invalid passkey" });
+    }
+    const ts = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    if (!isValidDateValue(ts)) {
+        return res.status(400).json({ error: "timestamp is invalid" });
+    }
+    const tempNum = toNumericReading(temp);
+    if (tempNum === null) {
+        return res.status(400).json({ error: "temperarutre is not a number" });
+    }
+
+    const humNum = toNumericReading(humidty);
+    if (humNum === null) {
+        return res.status(400).json({ error: "humidty is not a number" });
+    }
+
+    try {
+        await insertTemp(hiveID, tempNum, ts);
+        await insertHumidity(hiveID, humNum, ts);
     } catch (e) {
         return res.status(500).json({ error: "" + e });
     }

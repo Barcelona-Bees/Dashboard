@@ -80,6 +80,20 @@ async function insertTemp(hiveID, reading, timestamp){
 
 }
 
+
+/**
+ * Inserts a Humidity reading
+ * 
+ * @param {*} hiveID - the hiveID
+ * @param {*} reading - the reading of the temperature
+ * @param {*} timestamp - timestamp of the reading
+ */
+async function insertHumidity(hiveID, reading, timestamp){
+   
+    await dbutils.insertData('Humidity',{hiveID:hiveID, reading: reading, timestamp : timestamp});
+
+}
+
 /**
  * Gets the last temperature for the Hive
  * 
@@ -155,5 +169,6 @@ export {
     getLatestTemperatureReading,
     getTemperatureReadingAt,
     insertTemp,
+    insertHumidity,
     getTempMeasurement
 };
