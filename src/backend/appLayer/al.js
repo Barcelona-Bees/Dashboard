@@ -268,7 +268,7 @@ app.post("/upload", async (req, res) => {
     return res.status(200).json({ success: true });
 });
 
-const PORT = Number(process.env.PORT) || 3001;
+const PORT = Number(process.env.PORT) || 3000;
 
 export { app };
 
