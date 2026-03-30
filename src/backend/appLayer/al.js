@@ -364,7 +364,6 @@ app.get("/Humidity/measurement", async (req, res) => {
  */
 app.get("/Humidity/measurement/latest", async (req, res) => {
     try {
-        console.log('test');
         const result = await getLatestHumidityReading(DEFAULT_HIVE_ID);
         const measurement = result.rows?.[0]?.reading ?? null;
         return res.status(200).json({ measurement });
