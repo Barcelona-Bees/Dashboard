@@ -14,7 +14,7 @@ async function runDirectSQL(){
 
     let test = await dbutils.runDirectSQL('SELECT * FROM Hive;');
 
-    console.log(test);
+    // console.log(test);
 }
 //runDirectSQL()
 
@@ -29,7 +29,7 @@ async function runDirectSQL(){
 async function getData(){
     let test = await dbutils.getData('hive');
 
-    console.log(test);
+    // console.log(test);
 }
 //getData();
 
@@ -47,7 +47,7 @@ async function getData(){
 async function getDataPrepared(hiveid){
     let test = await dbutils.getData('hive',['*'],{hiveID : hiveid});
 
-    console.log(test);
+    // console.log(test);
 }
 // getDataPrepared(1);
 
@@ -63,7 +63,7 @@ async function getDataPrepared(hiveid){
 async function insertData(){
     let test = await dbutils.insertData('hive',{hiveID: 2, zipCode : 14602, name : 'test2', startDate: new Date()});
 
-    console.log(test)
+    // console.log(test)
 }
 // insertData();
 

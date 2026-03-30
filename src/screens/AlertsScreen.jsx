@@ -1,3 +1,4 @@
+/* Alerts from computeAlerts(readings); empty state when API returns no rows (getCurrentReading === null). */
 import { useState, useEffect } from "react";
 import AlertCard from "../components/AlertCard";
 import { AlertsSkeleton } from "../components/Skeleton";
@@ -11,18 +12,31 @@ export default function AlertsScreen() {
   const [updatedAt, setUpdatedAt] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [empty, setEmpty] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true);
         setError(null);
+        setEmpty(false);
         const current = await getCurrentReading();
+        if (current == null) {
+          setReadings(null);
+          setUpdatedAt("");
+          setEmpty(true);
+          return;
+        }
         setReadings(transformToFrontendFormat(current));
         setUpdatedAt(formatTimestamp(current.timestamp));
       } catch (err) {
         console.error("Error fetching alerts data:", err);
-        setError("Failed to load data. Please check if the backend server is running.");
+        const msg = err instanceof Error ? err.message : "";
+        setError(
+          msg.includes("fetch") || msg.includes("Network")
+            ? "Cannot reach the API. Start the backend and check VITE_API_BASE."
+            : msg || "Request failed."
+        );
       } finally {
         setLoading(false);
       }
@@ -40,6 +54,19 @@ export default function AlertsScreen() {
         <div className="center">
           <div className="h1" style={{ color: "var(--danger)" }}>Error</div>
           <div className="smallMuted">{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (empty) {
+    return (
+      <div className="page">
+        <div className="center">
+          <div className="h1" style={{ fontSize: 18 }}>No readings</div>
+          <div className="smallMuted">
+            Add temperature data to the database or run <code>npm run db:seed</code>.
+          </div>
         </div>
       </div>
     );

@@ -6,13 +6,21 @@
   "scripts": {
     "dev": "vite",
     "dev:backend": "node src/backend/appLayer/al.js",
+    "db:setup": "psql -U postgres -d postgres -f scripts/setup-postgres.sql",
+    "db:seed": "psql -U postgres -d siteinfo -f scripts/seed-demo-readings.sql",
+    "demo:push": "node scripts/send-sample-reading.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "start": "node src/backend/appLayer/al.js",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "test:watch": "jest --watch"
   },
+  "optionalDependencies": {
+    "@esbuild/darwin-arm64": "0.27.2",
+    "@rollup/rollup-darwin-arm64": "4.59.0"
+  },
   "dependencies": {
+    "dotenv": "^16.4.7",
     "bcrypt": "^6.0.0",
     "express": "^5.2.1",
     "pg": "^8.19.0",
@@ -23,6 +31,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^9.2.1",
     "jest": "^30.2.0",
+    "rollup": "^4.59.0",
     "vite": "^7.3.1"
   },
   "jest": {

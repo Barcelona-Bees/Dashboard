@@ -1,3 +1,7 @@
+/**
+ * Application layer — Express API over hive data (datalink → Postgres → JSON for the React app).
+ *
+ */
 // Application layer – Express API over hive data (calls bl functions to send data to frontend)
 
 import path from "node:path";
@@ -19,6 +23,8 @@ import {
     insertHumidity
 } from "../dataLinkLayer/humidity.js";
 import { isValidDateValue, toNumericReading } from "../busLayer/utils.js";
+// Startup DB check (see dbutils.verifyDatabaseConnection) — keeps PR behavior: no silent half-running server.
+import { verifyDatabaseConnection } from "../dataLinkLayer/dbutils.js";
 import { time } from "node:console";
 
 /** True when this file is the process entrypoint (not when Jest or another module imports it). */
@@ -42,15 +48,63 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+const readingStreamClients = new Set();
+
+function notifyReadingStreamClients() {
+    const dead = [];
+    for (const clientRes of readingStreamClients) {
+        try {
+            clientRes.write("event: reading\ndata: {}\n\n");
+        } catch {
+            dead.push(clientRes);
+        }
+    }
+    for (const r of dead) {
+        readingStreamClients.delete(r);
+    }
+}
+
+app.get("/events/readings", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    if (typeof res.flushHeaders === "function") {
+        res.flushHeaders();
+    }
+    readingStreamClients.add(res);
+    res.write("event: connected\ndata: {}\n\n");
+    const ping = setInterval(() => {
+        try {
+            res.write(": ping\n\n");
+        } catch {
+            clearInterval(ping);
+            readingStreamClients.delete(res);
+        }
+    }, 45_000);
+    req.on("close", () => {
+        clearInterval(ping);
+        readingStreamClients.delete(res);
+    });
+});
+
 function round(date) {
     const ms = 10 * 60 * 1000;
     return new Date(Math.floor(date.getTime() / ms) * ms);
 }
 
+/**
+ * Lower bound for valid queries: Hive.startDate (pg may return startdate / startDate keys).
+ * Future dates are treated as invalid metadata so `dateOutOfRange(today)` does not return true
+ * (that used to yield HTTP 400 on /temp/twoweeks and broke the dashboard with no data).
+ */
 async function getHiveStartDate(hiveID = DEFAULT_HIVE_ID) {
     const row = await getStartTime(hiveID);
-    if (!row?.startdate) return new Date(0);
-    return new Date(row.startdate);
+    const raw = row?.startdate ?? row?.startDate;
+    if (!raw) return new Date(0);
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return new Date(0);
+    if (d.getTime() > Date.now()) return new Date(0);
+    return d;
 }
 
 async function dateOutOfRange(d) {
@@ -93,7 +147,8 @@ app.get("/temp/measurement/latest", async (req, res) => {
     try {
         const result = await getLatestTemperatureReading(DEFAULT_HIVE_ID);
         const measurement = result.rows?.[0]?.reading ?? null;
-        return res.status(200).json({ measurement });
+        const timestamp = result.rows?.[0]?.timestamp ?? null;
+        return res.status(200).json({ measurement, timestamp });
     } catch (e) {
         return res.status(500).json({ error: String(e) });
     }
@@ -271,6 +326,7 @@ app.post("/upload/temp", async (req, res) => {
         return res.status(500).json({ error: "" + e });
     }
 
+    notifyReadingStreamClients();
     return res.status(200).json({ success: true });
 });
 
@@ -308,7 +364,6 @@ app.get("/Humidity/measurement", async (req, res) => {
  */
 app.get("/Humidity/measurement/latest", async (req, res) => {
     try {
-        console.log('test');
         const result = await getLatestHumidityReading(DEFAULT_HIVE_ID);
         const measurement = result.rows?.[0]?.reading ?? null;
         return res.status(200).json({ measurement });
@@ -489,6 +544,7 @@ app.post("/upload/Humidity", async (req, res) => {
         return res.status(500).json({ error: "" + e });
     }
 
+    notifyReadingStreamClients();
     return res.status(200).json({ success: true });
 });
 
@@ -524,6 +580,7 @@ app.post("/uploadall/", async (req, res) => {
         return res.status(500).json({ error: "" + e });
     }
 
+    notifyReadingStreamClients();
     return res.status(200).json({ success: true });
 });
 
@@ -532,23 +589,48 @@ const PORT = Number(process.env.PORT) || 3001;
 export { app };
 
 if (isMainModule) {
-    const server = app.listen(PORT);
-
-    server.once("error", (err) => {
-        console.error("Failed to start server:", err.message);
-        if (err.code === "EADDRINUSE") {
+    // Async IIFE: verify DB before app.listen so operators get one clear error (and exit 1) instead of 500s per route.
+    (async () => {
+        const dbCheck = await verifyDatabaseConnection();
+        if (!dbCheck.ok) {
+            console.error("[db] Cannot connect to PostgreSQL:", dbCheck.message);
             console.error(
-                `Port ${PORT} is already in use (another dev:backend or app is running). Stop that process or set a different port, e.g. PORT=3002 npm run dev:backend`
+                "[db] Expected role/database: student / siteinfo (see .env.example).\n" +
+                    "[db] Create them once with a superuser account, e.g.:\n" +
+                    "     npm run db:setup\n" +
+                    "     (uses psql -U postgres — avoids defaulting to your macOS login as the DB role)"
             );
+            process.exit(1);
         }
-        process.exit(1);
-    });
+        console.log(
+            "[db] OK —",
+            process.env.PGUSER || "student",
+            "@",
+            process.env.PGHOST || "localhost",
+            "/",
+            process.env.PGDATABASE || "siteinfo"
+        );
 
-    server.once("listening", () => {
-        const addr = server.address();
-        const host = typeof addr === "object" && addr ? addr.address : "localhost";
-        // const host = typeof addr === "object" && addr ? addr.address : "https://barcbees.webdev.gccis.rit.edu/";
-        const port = typeof addr === "object" && addr ? addr.port : PORT;
-        console.log(`Backend listening on http://${host === "::" ? "localhost" : host}:${port}`);
-    });
+        const server = app.listen(PORT);
+
+        server.once("error", (err) => {
+            console.error("Failed to start server:", err.message);
+            if (err.code === "EADDRINUSE") {
+                console.error(
+                    `Port ${PORT} is already in use (another dev:backend or app is running). Stop that process or set a different port, e.g. PORT=3002 npm run dev:backend`
+                );
+            }
+            process.exit(1);
+        });
+
+        server.once("listening", () => {
+            const addr = server.address();
+            const host =
+                typeof addr === "object" && addr ? addr.address : "localhost";
+            const port = typeof addr === "object" && addr ? addr.port : PORT;
+            console.log(
+                `Backend listening on http://${host === "::" ? "localhost" : host}:${port}`
+            );
+        });
+    })();
 }
