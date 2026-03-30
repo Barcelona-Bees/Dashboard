@@ -80,20 +80,6 @@ async function insertTemp(hiveID, reading, timestamp){
 
 }
 
-
-/**
- * Inserts a Humidity reading
- * 
- * @param {*} hiveID - the hiveID
- * @param {*} reading - the reading of the temperature
- * @param {*} timestamp - timestamp of the reading
- */
-async function insertHumidity(hiveID, reading, timestamp){
-   
-    await dbutils.insertData('Humidity',{hiveID:hiveID, reading: reading, timestamp : timestamp});
-
-}
-
 /**
  * Gets the last temperature for the Hive
  * 
@@ -137,7 +123,7 @@ async function getLatestTemperatureReading(hiveID) {
  * @param {*} startDate - the starting date to look for
  * @param {*} endDate - the ending date to look for
  */
-async function getCustomRange(hiveID, startDate, endDate){
+async function getCustomRangeTemperature(hiveID, startDate, endDate){
     // Keep results ordered so frontend can treat "last row" as most recent.
     let sqlString =
         "SELECT timestamp, reading FROM Temperature WHERE hiveID = $1 AND timestamp BETWEEN $2 AND $3 ORDER BY timestamp ASC";
@@ -165,10 +151,9 @@ async function getTempMeasurement(hiveID, timestamp, measurement = 'day') {
 // getCustomRange(1,'2026-02-01','2026-03-06'); // run manually when testing DB
 
 export {
-    getCustomRange,
+    getCustomRangeTemperature,
     getLatestTemperatureReading,
     getTemperatureReadingAt,
     insertTemp,
-    insertHumidity,
     getTempMeasurement
 };
