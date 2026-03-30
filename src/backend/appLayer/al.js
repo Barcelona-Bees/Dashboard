@@ -308,6 +308,7 @@ app.get("/Humidity/measurement", async (req, res) => {
  */
 app.get("/Humidity/measurement/latest", async (req, res) => {
     try {
+        console.log('test');
         const result = await getLatestHumidityReading(DEFAULT_HIVE_ID);
         const measurement = result.rows?.[0]?.reading ?? null;
         return res.status(200).json({ measurement });
@@ -493,7 +494,7 @@ app.post("/upload/Humidity", async (req, res) => {
 
 
 app.post("/uploadall/", async (req, res) => {
-    const { temp, humidty, timestamp, passkey } = req.body;
+    const { temp, humidity, timestamp, passkey } = req.body;
 
     if (!passkey) {
         return res.status(400).json({ error: "Invalid passkey" });
@@ -511,9 +512,9 @@ app.post("/uploadall/", async (req, res) => {
         return res.status(400).json({ error: "temperarutre is not a number" });
     }
 
-    const humNum = toNumericReading(humidty);
+    const humNum = toNumericReading(humidity);
     if (humNum === null) {
-        return res.status(400).json({ error: "humidty is not a number" });
+        return res.status(400).json({ error: "humidity is not a number" });
     }
 
     try {
@@ -526,7 +527,7 @@ app.post("/uploadall/", async (req, res) => {
     return res.status(200).json({ success: true });
 });
 
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 3001;
 
 export { app };
 

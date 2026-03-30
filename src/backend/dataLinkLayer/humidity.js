@@ -1,6 +1,6 @@
 import * as dbutils from "./dbutils.js";
 /**
- * The humidty DLL
+ * The humidity DLL
  * 
  */
 
@@ -9,7 +9,7 @@ import * as dbutils from "./dbutils.js";
  * Inserts a Humidity reading
  * 
  * @param {*} hiveID - the hiveID
- * @param {*} reading - the reading of the HUMIDTY
+ * @param {*} reading - the reading of the humidity
  * @param {*} timestamp - timestamp of the reading
  */
 async function insertHumidity(hiveID, reading, timestamp){
@@ -19,42 +19,42 @@ async function insertHumidity(hiveID, reading, timestamp){
 }
 
 /**
- * Gets the last HUMIDTY for the Hive
+ * Gets the last humidity for the Hive
  * 
  */
-async function getLastHumidty(){
-    let sqlString = "SELECT * FROM HUMIDTY WHERE HIVEID = 1 AND tempid = (SELECT MAX(tempid) from HUMIDTY where HIVEID = 1);";
+async function getLastHumidity(){
+    let sqlString = "SELECT * FROM humidity WHERE HIVEID = 1 AND humidityid = (SELECT MAX(humidityid) from humidity where HIVEID = 1);";
     let rJSON = await dbutils.runDirectSQL(sqlString);
 
     return rJSON.rows[0];
 }
 
 /**
- * Exact match for one HUMIDTY row at (hiveID, timestamp).
+ * Exact match for one humidity row at (hiveID, timestamp).
  *
  * @param {number} hiveID
  * @param {Date} timestamp
  */
 async function getHumidityReadingAt(hiveID, timestamp) {
-    return await dbutils.getData("HUMIDTY", ["reading"], {
+    return await dbutils.getData("humidity", ["reading"], {
         hiveID,
         timestamp,
     });
 }
 
 /**
- * Latest HUMIDTY reading for a hive (row with max timestamp).
+ * Latest humidity reading for a hive (row with max timestamp).
  *
  * @param {number} hiveID
  */
 async function getLatestHumidityReading(hiveID) {
     const sql =
-    "SELECT * FROM HUMIDTY WHERE HIVEID = $1 AND tempid = (SELECT MAX(tempid) from HUMIDTY where HIVEID = $1);";
+    "SELECT * FROM humidity WHERE HIVEID = $1 AND humidityid = (SELECT MAX(humidityid) from humidity where HIVEID = $1);";
     return await dbutils.runDirectSQLwithPrepared(sql, [hiveID]);
 }
 
 /**
- * Returns the HUMIDTYs between the startDate and endDate for given hiveID
+ * Returns the Humiditys between the startDate and endDate for given hiveID
  * 
  * 
  * @param {*} hiveID - the hiveID
@@ -64,7 +64,7 @@ async function getLatestHumidityReading(hiveID) {
 async function getCustomRangeHumidity(hiveID, startDate, endDate){
     // Keep results ordered so frontend can treat "last row" as most recent.
     let sqlString =
-        "SELECT timestamp, reading FROM HUMIDTY WHERE hiveID = $1 AND timestamp BETWEEN $2 AND $3 ORDER BY timestamp ASC";
+        "SELECT timestamp, reading FROM humidity WHERE hiveID = $1 AND timestamp BETWEEN $2 AND $3 ORDER BY timestamp ASC";
     let paramsArray = [hiveID, startDate, endDate];
     let rJson = await dbutils.runDirectSQLwithPrepared(sqlString, paramsArray );
 
@@ -73,25 +73,22 @@ async function getCustomRangeHumidity(hiveID, startDate, endDate){
 
 
 /**
- * Latest HUMIDTY reading for a hive (row with max timestamp).
+ * Latest humidity reading for a hive (row with max timestamp).
  *
  * @param {number} hiveID
  */
 async function getHumidityMeasurement(hiveID, timestamp, measurement = 'day') {
     const sql =
-        "SELECT timestamp, reading FROM HUMIDTY WHERE hiveID = $1 AND DATE_TRUNC($2,timestamp) = TO_TIMESTAMP($3)";
+        "SELECT timestamp, reading FROM humidity WHERE hiveID = $1 AND DATE_TRUNC($2,timestamp) = TO_TIMESTAMP($3)";
         // console.log(timestamp);
     return await dbutils.runDirectSQLwithPrepared(sql, [hiveID, measurement, timestamp]);
 }
 
-// await getLastTemp();
-// insertTemp();
-// getCustomRange(1,'2026-02-01','2026-03-06'); // run manually when testing DB
-
 export {
     getCustomRangeHumidity,
-    getLastHumidty,
+    getLastHumidity,
     getHumidityReadingAt,
     insertHumidity,
-    getHumidityMeasurement
+    getHumidityMeasurement,
+    getLatestHumidityReading
 };
