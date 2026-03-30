@@ -5,13 +5,19 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { getStartTime, testPasskey } from "../dataLinkLayer/hiveUtils.js";
 import {
-    getCustomRange,
+    getCustomRangeTemperature,
     getLatestTemperatureReading,
     getTempMeasurement,
     getTemperatureReadingAt,
-    insertHumidity,
     insertTemp,
 } from "../dataLinkLayer/temp.js";
+import {
+    getCustomRangeHumidity,
+    getLatestHumidityReading,
+    getHumidityMeasurement,
+    getHumidityReadingAt,
+    insertHumidity
+} from "../dataLinkLayer/humidity.js";
 import { isValidDateValue, toNumericReading } from "../busLayer/utils.js";
 import { time } from "node:console";
 
@@ -67,7 +73,6 @@ app.get("/temp/measurement", async (req, res) => {
 
     let timeOf = timestamp.getTime()/1000;
 
-    console.log("this is the ts", timestamp)
     if (!isValidDateValue(timestamp) || (await dateOutOfRange(timestamp))) {
         return res.status(400).json({ error: "Invalid or out-of-range date" });
     }
@@ -115,7 +120,7 @@ app.get("/temp/day", async (req, res) => {
         (await dateOutOfRange(yesterday))
     ) {
         const startDate = await getHiveStartDate(DEFAULT_HIVE_ID);
-        const measurement = await getCustomRange(
+        const measurement = await getCustomRangeTemperature(
             DEFAULT_HIVE_ID,
             startDate,
             today
@@ -123,7 +128,7 @@ app.get("/temp/day", async (req, res) => {
         return res.status(200).json({ measurement });
     }
 
-    const measurement = await getCustomRange(
+    const measurement = await getCustomRangeTemperature(
         DEFAULT_HIVE_ID,
         yesterday,
         today
@@ -152,7 +157,7 @@ app.get("/temp/week", async (req, res) => {
         (await dateOutOfRange(weekAgo))
     ) {
         const startDate = await getHiveStartDate(DEFAULT_HIVE_ID);
-        const measurement = await getCustomRange(
+        const measurement = await getCustomRangeTemperature(
             DEFAULT_HIVE_ID,
             startDate,
             today
@@ -160,7 +165,7 @@ app.get("/temp/week", async (req, res) => {
         return res.status(200).json({ measurement });
     }
 
-    const measurement = await getCustomRange(
+    const measurement = await getCustomRangeTemperature(
         DEFAULT_HIVE_ID,
         weekAgo,
         today
@@ -185,7 +190,7 @@ app.get("/temp/twoweeks", async (req, res) => {
 
     if (!isValidDateValue(twoWeeks) || (await dateOutOfRange(twoWeeks))) {
         const startDate = await getHiveStartDate(DEFAULT_HIVE_ID);
-        const measurement = await getCustomRange(
+        const measurement = await getCustomRangeTemperature(
             DEFAULT_HIVE_ID,
             startDate,
             today
@@ -193,7 +198,7 @@ app.get("/temp/twoweeks", async (req, res) => {
         return res.status(200).json({ measurement });
     }
 
-    const measurement = await getCustomRange(
+    const measurement = await getCustomRangeTemperature(
         DEFAULT_HIVE_ID,
         twoWeeks,
         today
@@ -231,13 +236,13 @@ app.get("/temp/range", async (req, res) => {
         }
         const lo = new Date(Math.min(start.getTime(), endClamped.getTime()));
         const hi = new Date(Math.max(start.getTime(), endClamped.getTime()));
-        const measurement = await getCustomRange(DEFAULT_HIVE_ID, lo, hi);
+        const measurement = await getCustomRangeTemperature(DEFAULT_HIVE_ID, lo, hi);
         return res.status(200).json({ measurement });
     }
 
     const lo = new Date(Math.min(start.getTime(), end.getTime()));
     const hi = new Date(Math.max(start.getTime(), end.getTime()));
-    const measurement = await getCustomRange(DEFAULT_HIVE_ID, lo, hi);
+    const measurement = await getCustomRangeTemperature(DEFAULT_HIVE_ID, lo, hi);
     return res.status(200).json({ measurement });
 });
 
@@ -268,6 +273,224 @@ app.post("/upload/temp", async (req, res) => {
 
     return res.status(200).json({ success: true });
 });
+
+// HUMIDITY ===========================================
+
+/**
+ * Gets data from a single timestamp.
+ *
+ * @param datetime Timestamp as a string: 2026-01-14T23:50:00
+ * @returns json
+ */
+app.get("/Humidity/measurement", async (req, res) => {
+    const datetime = req.query.datetime;
+    
+    console.log(datetime);
+    const timestamp = new Date(datetime);
+
+    let timeOf = timestamp.getTime()/1000;
+
+    if (!isValidDateValue(timestamp) || (await dateOutOfRange(timestamp))) {
+        return res.status(400).json({ error: "Invalid or out-of-range date" });
+    }
+
+    const result = await getHumidityMeasurement(DEFAULT_HIVE_ID, timeOf);
+    console.log(result);
+
+    const measurement = result.rows?.[0]?.reading ?? null;
+    return res.status(200).json({ measurement });
+});
+
+/**
+ * Gets the most recent Humidity reading for the hive (latest row by timestamp).
+ *
+ * @returns json
+ */
+app.get("/Humidity/measurement/latest", async (req, res) => {
+    try {
+        const result = await getLatestHumidityReading(DEFAULT_HIVE_ID);
+        const measurement = result.rows?.[0]?.reading ?? null;
+        return res.status(200).json({ measurement });
+    } catch (e) {
+        return res.status(500).json({ error: String(e) });
+    }
+});
+
+/**
+ * Gets all the data from a 24 hour period.
+ *
+ * @param datetime Datetime as a string: 2026-01-14T23:50:00
+ * @returns json
+ */
+app.get("/Humidity/day", async (req, res) => {
+    const dayInMS = 1000 * 60 * 60 * 24;
+
+    const today = new Date(req.query.datetime);
+    const yesterday = new Date(today - dayInMS);
+
+    if (!isValidDateValue(today)) {
+        return res.status(400).json({ error: "Invalid date" });
+    }
+
+    if (
+        !isValidDateValue(yesterday) ||
+        (await dateOutOfRange(yesterday))
+    ) {
+        const startDate = await getHiveStartDate(DEFAULT_HIVE_ID);
+        const measurement = await getCustomRangeHumidity(
+            DEFAULT_HIVE_ID,
+            startDate,
+            today
+        );
+        return res.status(200).json({ measurement });
+    }
+
+    const measurement = await getCustomRangeHumidity(
+        DEFAULT_HIVE_ID,
+        yesterday,
+        today
+    );
+    return res.status(200).json({ measurement });
+});
+
+/**
+ * Gets roughly the past 7 days of data ending at datetime (same window logic as /day, but 7 days).
+ *
+ * @returns json
+ */
+app.get("/Humidity/week", async (req, res) => {
+    const dayInMS = 1000 * 60 * 60 * 24;
+    const weekInMS = 7 * dayInMS;
+
+    const today = new Date(req.query.datetime);
+    const weekAgo = new Date(today - weekInMS);
+
+    if (!isValidDateValue(today)) {
+        return res.status(400).json({ error: "Invalid date" });
+    }
+
+    if (
+        !isValidDateValue(weekAgo) ||
+        (await dateOutOfRange(weekAgo))
+    ) {
+        const startDate = await getHiveStartDate(DEFAULT_HIVE_ID);
+        const measurement = await getCustomRangeHumidity(
+            DEFAULT_HIVE_ID,
+            startDate,
+            today
+        );
+        return res.status(200).json({ measurement });
+    }
+
+    const measurement = await getCustomRangeHumidity(
+        DEFAULT_HIVE_ID,
+        weekAgo,
+        today
+    );
+    return res.status(200).json({ measurement });
+});
+
+/**
+ * Gets the past two weeks of data.
+ *
+ * @returns json
+ */
+app.get("/Humidity/twoweeks", async (req, res) => {
+    const twoWeeksInMS = 1000 * 60 * 60 * 24 * 14;
+
+    const today = round(new Date());
+    const twoWeeks = new Date(today - twoWeeksInMS);
+
+    if (!isValidDateValue(today) || (await dateOutOfRange(today))) {
+        return res.status(400).json({ error: "Invalid or out-of-range date" });
+    }
+
+    if (!isValidDateValue(twoWeeks) || (await dateOutOfRange(twoWeeks))) {
+        const startDate = await getHiveStartDate(DEFAULT_HIVE_ID);
+        const measurement = await getCustomRangeHumidity(
+            DEFAULT_HIVE_ID,
+            startDate,
+            today
+        );
+        return res.status(200).json({ measurement });
+    }
+
+    const measurement = await getCustomRangeHumidity(
+        DEFAULT_HIVE_ID,
+        twoWeeks,
+        today
+    );
+    return res.status(200).json({ measurement });
+});
+
+/**
+ * Gets a custom range of data.
+ *
+ * @param startTime Datetime as a string: 2026-01-07T23:50:00
+ * @param endTime Datetime as a string: 2026-01-14T23:50:00
+ * @returns json
+ */
+app.get("/Humidity/range", async (req, res) => {
+    const start = new Date(req.query.start);
+    const end = new Date(req.query.end);
+
+    if (!isValidDateValue(start) || (await dateOutOfRange(start))) {
+        return res.status(400).json({ error: "Invalid or out-of-range start date" });
+    }
+
+    if (!isValidDateValue(end)) {
+        return res.status(400).json({ error: "Invalid end date" });
+    }
+
+    if (await dateOutOfRange(end)) {
+        const hiveStart = await getHiveStartDate(DEFAULT_HIVE_ID);
+        const now = new Date();
+        let endClamped = end;
+        if (end.getTime() > now.getTime()) {
+            endClamped = now;
+        } else if (end.getTime() < hiveStart.getTime()) {
+            endClamped = hiveStart;
+        }
+        const lo = new Date(Math.min(start.getTime(), endClamped.getTime()));
+        const hi = new Date(Math.max(start.getTime(), endClamped.getTime()));
+        const measurement = await getCustomRangeHumidity(DEFAULT_HIVE_ID, lo, hi);
+        return res.status(200).json({ measurement });
+    }
+
+    const lo = new Date(Math.min(start.getTime(), end.getTime()));
+    const hi = new Date(Math.max(start.getTime(), end.getTime()));
+    const measurement = await getCustomRangeHumidity(DEFAULT_HIVE_ID, lo, hi);
+    return res.status(200).json({ measurement });
+});
+
+app.post("/upload/Humidity", async (req, res) => {
+    const { reading, timestamp, passkey } = req.body;
+
+    if (!passkey) {
+        return res.status(400).json({ error: "Invalid passkey" });
+    }
+    const hiveID = await testPasskey(passkey);
+    if (hiveID === -1) {
+        return res.status(400).json({ error: "Invalid passkey" });
+    }
+    const ts = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    if (!isValidDateValue(ts)) {
+        return res.status(400).json({ error: "timestamp is invalid" });
+    }
+    const readingNum = toNumericReading(reading);
+    if (readingNum === null) {
+        return res.status(400).json({ error: "reading is not a number" });
+    }
+
+    try {
+        await insertHumidity(hiveID, readingNum, ts);
+    } catch (e) {
+        return res.status(500).json({ error: "" + e });
+    }
+
+    return res.status(200).json({ success: true });
+});
+
 
 app.post("/uploadall/", async (req, res) => {
     const { temp, humidty, timestamp, passkey } = req.body;
