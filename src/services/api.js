@@ -140,6 +140,17 @@ export async function getCurrentReading() {
   return points[points.length - 1];
 }
 
+export async function getCurrentReadingAlt() {
+
+  let tempJson = await fetchMeasurementJson('/temp/measurement/latest');
+  let humidJson = await fetchMeasurementJson('/Humidity/measurement/latest');
+  tempJson['humidity']  = humidJson['measurement'];
+
+  console.log(tempJson);
+
+  return tempJson;
+}
+
 export async function getTwoWeeksData() {
   return fetchTempAndHumidityRows("/temp/twoweeks", "/Humidity/twoweeks");
 }
@@ -165,3 +176,5 @@ export async function getMeasurement(datetime) {
     humidity: null,
   };
 }
+
+getCurrentReadingAlt()
