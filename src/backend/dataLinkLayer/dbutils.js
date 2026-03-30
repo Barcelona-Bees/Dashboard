@@ -1,12 +1,49 @@
+/**
+ * dbutils.js — PostgreSQL pool + generic query helpers for the datalink layer.
+ *
+ * PR note: Credentials were hardcoded (student/student); they now come from env so local Mac/Homebrew
+ * Postgres and RIT VMs can use different users without code edits. `dotenv` loads repo-root `.env`
+ * before the Pool is constructed. `??` for password keeps backward compatibility: omit PGPASSWORD
+ * in .env → still defaults to "student" (lab VMs); set PGPASSWORD= for empty password (trust auth).
+ */
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 import { Pool } from "pg";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.join(__dirname, "../../../");
+// Load env in two passes so (1) the file next to package.json always applies, (2) cwd .env can override when running tests from another directory.
+dotenv.config({ path: path.join(repoRoot, ".env") });
+dotenv.config({ path: path.join(process.cwd(), ".env"), override: true });
+
 const pool = new Pool({
-  host: "localhost",
-  database: "siteinfo",
-  user: "student",
-  password: "student",
-  port: 5432,
+  host: process.env.PGHOST || "localhost",
+  port: Number(process.env.PGPORT || 5432),
+  database: process.env.PGDATABASE || "siteinfo",
+  user: process.env.PGUSER || "student",
+  password: process.env.PGPASSWORD ?? "student",
 });
+
+/**
+ * Smoke test used by al.js before listen(): avoids starting Express when Postgres is down/misconfigured,
+ * which previously produced noisy logs on every API hit. Does not validate tables—only connectivity.
+ */
+export async function verifyDatabaseConnection() {
+  const client = await pool.connect();
+  try {
+    await client.query("SELECT 1");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e.message,
+      code: e.code,
+    };
+  } finally {
+    client.release();
+  }
+}
 
 pool.on("error", (err) => {
   console.error("[dbutils] Pool error:", err.message);
