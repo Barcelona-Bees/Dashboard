@@ -59,7 +59,7 @@ async function dateOutOfRange(d) {
  * @param datetime Timestamp as a string: 2026-01-14T23:50:00
  * @returns json
  */
-app.get("/measurement", async (req, res) => {
+app.get("/temp/measurement", async (req, res) => {
     const datetime = req.query.datetime;
     
     console.log(datetime);
@@ -84,7 +84,7 @@ app.get("/measurement", async (req, res) => {
  *
  * @returns json
  */
-app.get("/measurement/latest", async (req, res) => {
+app.get("/temp/measurement/latest", async (req, res) => {
     try {
         const result = await getLatestTemperatureReading(DEFAULT_HIVE_ID);
         const measurement = result.rows?.[0]?.reading ?? null;
@@ -100,7 +100,7 @@ app.get("/measurement/latest", async (req, res) => {
  * @param datetime Datetime as a string: 2026-01-14T23:50:00
  * @returns json
  */
-app.get("/day", async (req, res) => {
+app.get("/temp/day", async (req, res) => {
     const dayInMS = 1000 * 60 * 60 * 24;
 
     const today = new Date(req.query.datetime);
@@ -136,7 +136,7 @@ app.get("/day", async (req, res) => {
  *
  * @returns json
  */
-app.get("/week", async (req, res) => {
+app.get("/temp/week", async (req, res) => {
     const dayInMS = 1000 * 60 * 60 * 24;
     const weekInMS = 7 * dayInMS;
 
@@ -173,7 +173,7 @@ app.get("/week", async (req, res) => {
  *
  * @returns json
  */
-app.get("/twoweeks", async (req, res) => {
+app.get("/temp/twoweeks", async (req, res) => {
     const twoWeeksInMS = 1000 * 60 * 60 * 24 * 14;
 
     const today = round(new Date());
@@ -208,7 +208,7 @@ app.get("/twoweeks", async (req, res) => {
  * @param endTime Datetime as a string: 2026-01-14T23:50:00
  * @returns json
  */
-app.get("/range", async (req, res) => {
+app.get("/temp/range", async (req, res) => {
     const start = new Date(req.query.start);
     const end = new Date(req.query.end);
 
@@ -241,7 +241,7 @@ app.get("/range", async (req, res) => {
     return res.status(200).json({ measurement });
 });
 
-app.post("/upload", async (req, res) => {
+app.post("/upload/temp", async (req, res) => {
     const { reading, timestamp, passkey } = req.body;
 
     if (!passkey) {
@@ -269,7 +269,7 @@ app.post("/upload", async (req, res) => {
     return res.status(200).json({ success: true });
 });
 
-app.post("/upload2/", async (req, res) => {
+app.post("/uploadall/", async (req, res) => {
     const { temp, humidty, timestamp, passkey } = req.body;
 
     if (!passkey) {
