@@ -1,5 +1,7 @@
 import { login, validSessionToken } from "../dataLinkLayer/login.js";
 import { getStartTime } from "../dataLinkLayer/hiveUtils.js";
+import bcrypt from 'bcrypt';
+
 
 /**
  * Checks if login information is valid
@@ -143,15 +145,12 @@ async function isValidSessionToken(token) {
  * @returns hashed string
  */
 async function hashPassword(password) {
-    const salt = "Q_4EZWSLA^NBg4<bETXU?PA]chFF9d@iHPAdW=NXbaNB<Z5=jW4iCPi3XPiN@IT66P:lW]?aKnOLj?;Y6:=P9R7<Ua3A9l=nN["
-    bcrypt.hash(password, salt, function(err, hash) {
-        if (err) {
-            console.error(err);
-            return;
-        }
-    });
+    const salt = "$2a$10$R9h/cIPz0gi.URNNX3kh2O";
+    const hash = await bcrypt.hash(password, salt);
     return hash;
 }
+
+// console.log(await hashPassword("Hello"));
 
 /**
  * Generates a new user token
