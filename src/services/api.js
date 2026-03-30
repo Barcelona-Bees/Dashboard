@@ -1,7 +1,7 @@
 /**
  * Beehive API client — browser `fetch` to Express in src/backend/appLayer/al.js.
  * Base URL: VITE_API_BASE (build-time) so production can point at the VM host:port.
- * Paths match the server: /temp/*, /Humidity/* (there is no generic /api/readings route in this repo).
+ * Paths match the server: /temp/*, /Humidity/*, `/events/readings` (SSE after uploads).
  * Temperature values are treated as °F at the dashboard layer (matches DB `reading` for this project).
  */
 
@@ -140,15 +140,53 @@ export async function getCurrentReading() {
   return points[points.length - 1];
 }
 
+/**
+ * Latest temp + humidity from `/measurement/latest` (true latest rows), not the last point of twoweeks merge.
+ * Shape matches merged points: `{ temperatureF, humidity, timestamp }` for `transformToFrontendFormat`.
+ */
 export async function getCurrentReadingAlt() {
+  try {
+    const t = await fetchMeasurementJson("/temp/measurement/latest");
+    if (t.measurement == null) return null;
+    const temperatureF = parseFloat(t.measurement);
+    if (Number.isNaN(temperatureF)) return null;
 
-  let tempJson = await fetchMeasurementJson('/temp/measurement/latest');
-  let humidJson = await fetchMeasurementJson('/Humidity/measurement/latest');
-  tempJson['humidity']  = humidJson['measurement'];
+    let hum = null;
+    try {
+      const h = await fetchMeasurementJson("/Humidity/measurement/latest");
+      if (h.measurement != null) {
+        const v = parseFloat(h.measurement);
+        if (!Number.isNaN(v)) hum = v;
+      }
+    } catch {
+      /* humidity optional */
+    }
 
-  console.log(tempJson);
+    const ts =
+      t.timestamp != null
+        ? t.timestamp instanceof Date
+          ? t.timestamp.toISOString()
+          : String(t.timestamp)
+        : null;
 
-  return tempJson;
+    return { temperatureF, humidity: hum, timestamp: ts };
+  } catch {
+    return null;
+  }
+}
+
+/** Refetch when the server inserts a reading (opens `EventSource` to `${API_BASE}/events/readings`). */
+export function subscribeReadingUpdates(onUpdate) {
+  if (typeof EventSource === "undefined") {
+    return () => {};
+  }
+  const es = new EventSource(`${API_BASE}/events/readings`);
+  es.addEventListener("reading", () => {
+    onUpdate();
+  });
+  return () => {
+    es.close();
+  };
 }
 
 export async function getTwoWeeksData() {
@@ -176,5 +214,3 @@ export async function getMeasurement(datetime) {
     humidity: null,
   };
 }
-
-getCurrentReadingAlt()

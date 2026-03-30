@@ -4,7 +4,11 @@ import AccessibleLineChart from "../components/AccessibleLineChart";
 import AlertCard from "../components/AlertCard";
 import { HomeSkeleton } from "../components/Skeleton";
 import { THRESHOLDS_F } from "../config/thresholds";
-import { getCurrentReading, getTwoWeeksData } from "../services/api";
+import {
+  getCurrentReadingAlt,
+  getTwoWeeksData,
+  subscribeReadingUpdates,
+} from "../services/api";
 import { computeAlerts } from "../services/alerts";
 import { transformToFrontendFormat, transformTo24HourChart } from "../services/dataTransform";
 import { formatTimestamp, celsiusToFahrenheit } from "../utils/conversions";
@@ -13,6 +17,17 @@ import {
   buildExternalTempFMapForDate,
   getSyntheticExternalTempF,
 } from "../services/weather";
+
+/**
+ * Fallback poll if SSE disconnects. Default 5s — worst-case delay without push.
+ * Set `VITE_HOME_POLL_MS` (e.g. `30000` for 30s) to reduce request rate.
+ */
+const HOME_POLL_MS = (() => {
+  const raw =
+    typeof import.meta !== "undefined" ? import.meta.env?.VITE_HOME_POLL_MS : undefined;
+  const n = raw != null && String(raw).trim() !== "" ? Number(raw) : NaN;
+  return Number.isFinite(n) && n >= 3000 ? n : 5_000;
+})();
 
 export default function HomeScreen() {
   const [readings, setReadings] = useState(null);
@@ -26,16 +41,23 @@ export default function HomeScreen() {
   const [empty, setEmpty] = useState(false);
 
   useEffect(() => {
-    async function fetchData() {
+    /** @param {boolean} silent When true, skip full-page loading skeleton (background poll / tab focus). */
+    async function fetchData(silent = false) {
       try {
-        setLoading(true);
+        if (!silent) {
+          setLoading(true);
+        }
         setError(null);
         setEmpty(false);
 
-        const [current, twoWeeks] = await Promise.all([
-          getCurrentReading(),
+        const [latest, twoWeeks] = await Promise.all([
+          getCurrentReadingAlt(),
           getTwoWeeksData(),
         ]);
+
+        const current =
+          latest ??
+          (twoWeeks.length > 0 ? twoWeeks[twoWeeks.length - 1] : null);
 
         if (current == null) {
           setReadings(null);
@@ -94,7 +116,9 @@ export default function HomeScreen() {
           setCurrentOutsideTempF(null);
         }
 
-        setUpdatedAt(formatTimestamp(current.timestamp));
+        setUpdatedAt(
+          current.timestamp ? formatTimestamp(current.timestamp) : ""
+        );
       } catch (err) {
         console.error("Error fetching data:", err);
         const msg =
@@ -107,15 +131,30 @@ export default function HomeScreen() {
             : msg
         );
       } finally {
-        setLoading(false);
+        if (!silent) {
+          setLoading(false);
+        }
       }
     }
 
-    fetchData();
+    fetchData(false);
 
-    // Auto-refresh home metrics every 5 minutes (independent of `npm run demo:push -- --loop`, which posts every ~10s by default).
-    const interval = setInterval(fetchData, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    const unsubscribe = subscribeReadingUpdates(() => fetchData(true));
+
+    const interval = setInterval(() => fetchData(true), HOME_POLL_MS);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        fetchData(true);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   if (loading) {
@@ -172,7 +211,7 @@ export default function HomeScreen() {
         <div className="heroMetric">
           <div className="heroMetricLabel">Inside hive temperature</div>
           <div className="heroMetricValue">
-            {readings.internalTemp.toFixed(1)}°F
+            {readings.internalTemp.toFixed(2)}°F
           </div>
         </div>
       </div>

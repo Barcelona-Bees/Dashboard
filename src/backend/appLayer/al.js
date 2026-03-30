@@ -48,6 +48,45 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+const readingStreamClients = new Set();
+
+function notifyReadingStreamClients() {
+    const dead = [];
+    for (const clientRes of readingStreamClients) {
+        try {
+            clientRes.write("event: reading\ndata: {}\n\n");
+        } catch {
+            dead.push(clientRes);
+        }
+    }
+    for (const r of dead) {
+        readingStreamClients.delete(r);
+    }
+}
+
+app.get("/events/readings", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    if (typeof res.flushHeaders === "function") {
+        res.flushHeaders();
+    }
+    readingStreamClients.add(res);
+    res.write("event: connected\ndata: {}\n\n");
+    const ping = setInterval(() => {
+        try {
+            res.write(": ping\n\n");
+        } catch {
+            clearInterval(ping);
+            readingStreamClients.delete(res);
+        }
+    }, 45_000);
+    req.on("close", () => {
+        clearInterval(ping);
+        readingStreamClients.delete(res);
+    });
+});
+
 function round(date) {
     const ms = 10 * 60 * 1000;
     return new Date(Math.floor(date.getTime() / ms) * ms);
@@ -287,6 +326,7 @@ app.post("/upload/temp", async (req, res) => {
         return res.status(500).json({ error: "" + e });
     }
 
+    notifyReadingStreamClients();
     return res.status(200).json({ success: true });
 });
 
@@ -505,6 +545,7 @@ app.post("/upload/Humidity", async (req, res) => {
         return res.status(500).json({ error: "" + e });
     }
 
+    notifyReadingStreamClients();
     return res.status(200).json({ success: true });
 });
 
@@ -540,6 +581,7 @@ app.post("/uploadall/", async (req, res) => {
         return res.status(500).json({ error: "" + e });
     }
 
+    notifyReadingStreamClients();
     return res.status(200).json({ success: true });
 });
 
