@@ -73,6 +73,9 @@ function notifyReadingStreamClients() {
 }
 
 app.get("/events/readings", (req, res) => {
+    if (String(process.env.DISABLE_SSE || "").toLowerCase() === "1") {
+        return res.sendStatus(204);
+    }
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
