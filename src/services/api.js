@@ -29,6 +29,13 @@ function parseBoolish(value) {
 // Keeping this expression simple allows bundlers to remove the SSE code when disabled.
 const DISABLE_SSE = parseBoolish(import.meta.env?.VITE_DISABLE_SSE);
 
+function parsePositiveInt(value, fallback) {
+  const n = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+const POLL_MS = parsePositiveInt(import.meta.env?.VITE_POLL_MS, 15_000);
+
 /**
  * Normalized row for charts/KPIs. `temperatureF` matches DB column `reading`
  * (stored as Fahrenheit per your sensor pipeline).
@@ -197,19 +204,26 @@ export async function getCurrentReadingAlt() {
 
 /** Refetch when the server inserts a reading (opens `EventSource` to `${API_BASE}/events/readings`). */
 export function subscribeReadingUpdates(onUpdate) {
-  if (DISABLE_SSE) {
-    return () => {};
+  const safeUpdate = typeof onUpdate === "function" ? onUpdate : () => {};
+
+  // Prefer SSE when available (instant updates), but fall back to polling when:
+  // - build disables SSE (proxy limitations), or
+  // - EventSource isn't available (non-browser / restricted env).
+  if (!DISABLE_SSE && typeof EventSource !== "undefined") {
+    const es = new EventSource(`${API_BASE}/events/readings`);
+    es.addEventListener("reading", () => {
+      safeUpdate();
+    });
+    return () => {
+      es.close();
+    };
   }
-  if (typeof EventSource === "undefined") {
-    return () => {};
-  }
-  const es = new EventSource(`${API_BASE}/events/readings`);
-  es.addEventListener("reading", () => {
-    onUpdate();
-  });
-  return () => {
-    es.close();
-  };
+
+  // Polling fallback: keeps the dashboard "auto updating" behind strict proxies.
+  // Keep it simple and let callers decide how fetchData debounces/optimizes.
+  safeUpdate();
+  const id = setInterval(() => safeUpdate(), POLL_MS);
+  return () => clearInterval(id);
 }
 
 export async function getTwoWeeksData() {

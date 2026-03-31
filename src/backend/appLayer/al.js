@@ -67,6 +67,16 @@ app.use((req, res, next) => {
     next();
 });
 
+// Some upstream proxies enforce very low per-client connection limits.
+// For those environments, forcing `Connection: close` prevents one keep-alive socket
+// from stalling subsequent requests (e.g., large JS bundles behind a strict gateway).
+if (parseBoolishEnv("FORCE_CONNECTION_CLOSE", false)) {
+    app.use((req, res, next) => {
+        res.setHeader("Connection", "close");
+        next();
+    });
+}
+
 app.use(express.json());
 
 const readingStreamClients = new Set();
@@ -645,6 +655,13 @@ if (shouldStartServer) {
         // Start listening first. (Under PM2 we saw the DB preflight can hang, leaving the process "online"
         // but with no open port and resulting in 503s from upstream.)
         const server = app.listen(PORT, "0.0.0.0");
+
+        // Disable keep-alive at the Node layer when requested. This pairs with FORCE_CONNECTION_CLOSE
+        // to work around strict proxies that only allow one concurrent connection per client.
+        if (parseBoolishEnv("DISABLE_KEEP_ALIVE", false)) {
+            server.keepAliveTimeout = 0;
+            server.headersTimeout = 65_000;
+        }
 
         server.once("error", (err) => {
             console.error("Failed to start server:", err.message);
