@@ -28,15 +28,28 @@ import { isValidDateValue, toNumericReading } from "../busLayer/utils.js";
 import { verifyDatabaseConnection } from "../dataLinkLayer/dbutils.js";
 import { time } from "node:console";
 
-/**
- * Start the HTTP server when running as an app process.
- *
- * Note: Under PM2, `process.argv[1]` may point to PM2's wrapper script instead of this file,
- * so "main module" checks can incorrectly evaluate to false and the process will stay online
- * without ever binding the port. We instead gate only for tests (Jest).
- */
-const shouldStartServer =
-    !process.env.JEST_WORKER_ID && process.env.NODE_ENV !== "test";
+function parseBoolishEnv(name, fallback = false) {
+    const raw = process.env[name];
+    if (raw == null) return fallback;
+    const v = String(raw).trim().toLowerCase();
+    return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
+function shouldStartHttpServer() {
+    // Never auto-listen under Jest.
+    if (process.env.JEST_WORKER_ID || process.env.NODE_ENV === "test") return false;
+    // PM2 always sets pm_id for managed processes.
+    if (process.env.pm_id != null) return true;
+    // Direct invocation: node .../al.js
+    const argv1 = process.argv?.[1];
+    if (argv1 && path.resolve(argv1) === path.resolve(fileURLToPath(import.meta.url))) {
+        return true;
+    }
+    // Default: behave like an app entrypoint.
+    return true;
+}
+
+const shouldStartServer = shouldStartHttpServer();
 
 const app = express();
 const DEFAULT_HIVE_ID = 1;
@@ -73,7 +86,7 @@ function notifyReadingStreamClients() {
 }
 
 app.get("/events/readings", (req, res) => {
-    if (String(process.env.DISABLE_SSE || "").toLowerCase() === "1") {
+    if (parseBoolishEnv("DISABLE_SSE", false)) {
         return res.sendStatus(204);
     }
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");

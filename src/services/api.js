@@ -18,12 +18,16 @@ const API_BASE =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE) ||
   defaultApiBase();
 
+function parseBoolish(value) {
+  const raw = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
 // Build-time flag (Vite replaces import.meta.env.* with literals in production builds).
 // Keeping this expression simple allows bundlers to remove the SSE code when disabled.
-const DISABLE_SSE = (() => {
-  const raw = (import.meta.env?.VITE_DISABLE_SSE ?? "").toString().toLowerCase();
-  return raw === "1" || raw === "true";
-})();
+const DISABLE_SSE = parseBoolish(import.meta.env?.VITE_DISABLE_SSE);
 
 /**
  * Normalized row for charts/KPIs. `temperatureF` matches DB column `reading`
