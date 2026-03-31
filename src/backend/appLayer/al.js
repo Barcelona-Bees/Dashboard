@@ -28,11 +28,15 @@ import { isValidDateValue, toNumericReading } from "../busLayer/utils.js";
 import { verifyDatabaseConnection } from "../dataLinkLayer/dbutils.js";
 import { time } from "node:console";
 
-/** True when this file is the process entrypoint (not when Jest or another module imports it). */
-const isMainModule =
-    Boolean(process.argv[1]) &&
-    path.resolve(fileURLToPath(import.meta.url)) ===
-        path.resolve(process.argv[1]);
+/**
+ * Start the HTTP server when running as an app process.
+ *
+ * Note: Under PM2, `process.argv[1]` may point to PM2's wrapper script instead of this file,
+ * so "main module" checks can incorrectly evaluate to false and the process will stay online
+ * without ever binding the port. We instead gate only for tests (Jest).
+ */
+const shouldStartServer =
+    !process.env.JEST_WORKER_ID && process.env.NODE_ENV !== "test";
 
 const app = express();
 const DEFAULT_HIVE_ID = 1;
@@ -620,7 +624,7 @@ const PORT = Number(process.env.PORT) || 3000;
 
 export { app };
 
-if (isMainModule) {
+if (shouldStartServer) {
     (async () => {
         // Start listening first. (Under PM2 we saw the DB preflight can hang, leaving the process "online"
         // but with no open port and resulting in 503s from upstream.)
