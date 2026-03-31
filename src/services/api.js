@@ -18,13 +18,12 @@ const API_BASE =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE) ||
   defaultApiBase();
 
-const DISABLE_SSE =
-  String(
-    typeof import.meta !== "undefined" && import.meta.env?.VITE_DISABLE_SSE
-  ).toLowerCase() === "1" ||
-  String(
-    typeof import.meta !== "undefined" && import.meta.env?.VITE_DISABLE_SSE
-  ).toLowerCase() === "true";
+// Build-time flag (Vite replaces import.meta.env.* with literals in production builds).
+// Keeping this expression simple allows bundlers to remove the SSE code when disabled.
+const DISABLE_SSE = (() => {
+  const raw = (import.meta.env?.VITE_DISABLE_SSE ?? "").toString().toLowerCase();
+  return raw === "1" || raw === "true";
+})();
 
 /**
  * Normalized row for charts/KPIs. `temperatureF` matches DB column `reading`
