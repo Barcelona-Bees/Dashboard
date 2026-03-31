@@ -621,28 +621,9 @@ const PORT = Number(process.env.PORT) || 3000;
 export { app };
 
 if (isMainModule) {
-    // Async IIFE: verify DB before app.listen so operators get one clear error (and exit 1) instead of 500s per route.
     (async () => {
-        const dbCheck = await verifyDatabaseConnection();
-        if (!dbCheck.ok) {
-            console.error("[db] Cannot connect to PostgreSQL:", dbCheck.message);
-            console.error(
-                "[db] Expected role/database: student / siteinfo (see .env.example).\n" +
-                    "[db] Create them once with a superuser account, e.g.:\n" +
-                    "     npm run db:setup\n" +
-                    "     (uses psql -U postgres — avoids defaulting to your macOS login as the DB role)"
-            );
-            process.exit(1);
-        }
-        console.log(
-            "[db] OK —",
-            process.env.PGUSER || "student",
-            "@",
-            process.env.PGHOST || "localhost",
-            "/",
-            process.env.PGDATABASE || "siteinfo"
-        );
-
+        // Start listening first. (Under PM2 we saw the DB preflight can hang, leaving the process "online"
+        // but with no open port and resulting in 503s from upstream.)
         const server = app.listen(PORT, "0.0.0.0");
 
         server.once("error", (err) => {
@@ -664,5 +645,25 @@ if (isMainModule) {
                 `Backend listening on http://${host === "::" ? "localhost" : host}:${port}`
             );
         });
+
+        // Run DB connectivity check in the background and log the result.
+        // If Postgres is down, the server stays up (static frontend still works) and API calls will error normally.
+        try {
+            const dbCheck = await verifyDatabaseConnection();
+            if (!dbCheck.ok) {
+                console.error("[db] Cannot connect to PostgreSQL:", dbCheck.message);
+            } else {
+                console.log(
+                    "[db] OK —",
+                    process.env.PGUSER || "student",
+                    "@",
+                    process.env.PGHOST || "localhost",
+                    "/",
+                    process.env.PGDATABASE || "siteinfo"
+                );
+            }
+        } catch (e) {
+            console.error("[db] Preflight threw:", String(e));
+        }
     })();
 }
