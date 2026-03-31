@@ -30,6 +30,9 @@ const isMainModule =
 const app = express();
 const DEFAULT_HIVE_ID = 1;
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
@@ -527,12 +530,18 @@ app.post("/uploadall/", async (req, res) => {
     return res.status(200).json({ success: true });
 });
 
+// Serve the Vite build (so GET / returns the frontend instead of "Cannot GET /")
+const distDir = path.resolve(__dirname, "../../../dist");
+app.use(express.static(distDir));
+app.get("/", (req, res) => res.sendFile(path.join(distDir, "index.html")));
+app.get("*", (req, res) => res.sendFile(path.join(distDir, "index.html")));
+
 const PORT = Number(process.env.PORT) || 3001;
 
 export { app };
 
 if (isMainModule) {
-    const server = app.listen(PORT);
+    const server = app.listen(PORT, "0.0.0.0");
 
     server.once("error", (err) => {
         console.error("Failed to start server:", err.message);
