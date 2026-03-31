@@ -18,6 +18,14 @@ const API_BASE =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE) ||
   defaultApiBase();
 
+const DISABLE_SSE =
+  String(
+    typeof import.meta !== "undefined" && import.meta.env?.VITE_DISABLE_SSE
+  ).toLowerCase() === "1" ||
+  String(
+    typeof import.meta !== "undefined" && import.meta.env?.VITE_DISABLE_SSE
+  ).toLowerCase() === "true";
+
 /**
  * Normalized row for charts/KPIs. `temperatureF` matches DB column `reading`
  * (stored as Fahrenheit per your sensor pipeline).
@@ -186,6 +194,9 @@ export async function getCurrentReadingAlt() {
 
 /** Refetch when the server inserts a reading (opens `EventSource` to `${API_BASE}/events/readings`). */
 export function subscribeReadingUpdates(onUpdate) {
+  if (DISABLE_SSE) {
+    return () => {};
+  }
   if (typeof EventSource === "undefined") {
     return () => {};
   }
