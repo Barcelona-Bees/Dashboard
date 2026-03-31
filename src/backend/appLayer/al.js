@@ -550,27 +550,29 @@ app.post("/upload/Humidity", async (req, res) => {
 
 
 app.post("/uploadall/", async (req, res) => {
-    const { temp, humidity, timestamp, passkey } = req.body;
+    const data = req.body.uplink_message.decoded_payload;
+// console.log("THIS IS THE DAT #####################", data);
+    const { temp, humidity, timestamp, passkey } = data;
 
     if (!passkey) {
-        return res.status(400).json({ error: "Invalid passkey" });
+        return res.status(200).json({ error: " Passkey is not present" });
     }
     const hiveID = await testPasskey(passkey);
     if (hiveID === -1) {
-        return res.status(400).json({ error: "Invalid passkey" });
+        return res.status(200).json({ error: "Invalid passkey match" });
     }
     const ts = timestamp instanceof Date ? timestamp : new Date(timestamp);
     if (!isValidDateValue(ts)) {
-        return res.status(400).json({ error: "timestamp is invalid" });
+        return res.status(200).json({ error: "timestamp is invalid" });
     }
     const tempNum = toNumericReading(temp);
     if (tempNum === null) {
-        return res.status(400).json({ error: "temperarutre is not a number" });
+        return res.status(200).json({ error: "temperarutre is not a number" });
     }
 
     const humNum = toNumericReading(humidity);
     if (humNum === null) {
-        return res.status(400).json({ error: "humidity is not a number" });
+        return res.status(200).json({ error: "humidity is not a number" });
     }
 
     try {
@@ -584,7 +586,7 @@ app.post("/uploadall/", async (req, res) => {
     return res.status(200).json({ success: true });
 });
 
-const PORT = Number(process.env.PORT) || 3001;
+const PORT = Number(process.env.PORT) || 3000;
 
 export { app };
 
