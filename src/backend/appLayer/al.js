@@ -7,6 +7,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
+import fs from "node:fs";
 import { getStartTime, testPasskey } from "../dataLinkLayer/hiveUtils.js";
 import {
     getCustomRangeTemperature,
@@ -590,10 +591,30 @@ app.post("/uploadall/", async (req, res) => {
 });
 
 // Serve the Vite build (so GET / returns the frontend instead of "Cannot GET /")
-const distDir = path.resolve(__dirname, "../../../dist");
+// Use cwd so PM2 `cwd: "/home/student/node_app"` works reliably on the VM.
+const distDir = path.resolve(process.cwd(), "dist");
+const indexHtmlPath = path.join(distDir, "index.html");
 app.use(express.static(distDir));
-app.get("/", (req, res) => res.sendFile(path.join(distDir, "index.html")));
-app.get(/.*/, (req, res) => res.sendFile(path.join(distDir, "index.html")));
+function sendIndexHtml(res) {
+    if (!fs.existsSync(indexHtmlPath)) {
+        return res
+            .status(404)
+            .type("text/plain")
+            .send(`Missing frontend build: ${indexHtmlPath}\nRun: npm run build`);
+    }
+    return res.sendFile(indexHtmlPath, (err) => {
+        if (err) {
+            // Ensure the request never hangs if sendFile errors.
+            if (!res.headersSent) {
+                res.status(500).type("text/plain").send(String(err));
+            } else {
+                res.end();
+            }
+        }
+    });
+}
+app.get("/", (req, res) => sendIndexHtml(res));
+app.get(/.*/, (req, res) => sendIndexHtml(res));
 
 const PORT = Number(process.env.PORT) || 3000;
 

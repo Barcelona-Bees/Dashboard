@@ -5,9 +5,18 @@
  * Temperature values are treated as °F at the dashboard layer (matches DB `reading` for this project).
  */
 
+function defaultApiBase() {
+  // Prefer same-origin in production (frontend is served by the same Express app).
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+  // Fallback for tests / non-browser contexts.
+  return "http://localhost:3001";
+}
+
 const API_BASE =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE) ||
-  "http://localhost:3001";
+  defaultApiBase();
 
 /**
  * Normalized row for charts/KPIs. `temperatureF` matches DB column `reading`
