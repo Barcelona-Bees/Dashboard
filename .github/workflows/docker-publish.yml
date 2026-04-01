@@ -1,10 +1,10 @@
-# Pushes ghcr.io/...:latest — ONLY when main/master updates (protects prod image).
-# Work on a feature branch: use CI workflow above; merge to main when ready to ship.
+# Pushes ghcr.io/...:latest — when main/master updates, OR manually (Actions → Run workflow).
 name: Docker publish
 
 on:
   push:
     branches: [main, master]
+  workflow_dispatch:
 
 permissions:
   contents: read

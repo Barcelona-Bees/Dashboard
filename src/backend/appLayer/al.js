@@ -48,6 +48,12 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+/** App Platform / load balancers: cheap liveness check (no DB hit). */
+app.get("/health", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).json({ ok: true });
+});
+
 const readingStreamClients = new Set();
 
 function notifyReadingStreamClients() {

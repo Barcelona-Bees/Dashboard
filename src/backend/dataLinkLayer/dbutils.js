@@ -17,13 +17,25 @@ const repoRoot = path.join(__dirname, "../../../");
 dotenv.config({ path: path.join(repoRoot, ".env") });
 dotenv.config({ path: path.join(process.cwd(), ".env"), override: true });
 
-const pool = new Pool({
-  host: process.env.PGHOST || "localhost",
-  port: Number(process.env.PGPORT || 5432),
-  database: process.env.PGDATABASE || "siteinfo",
-  user: process.env.PGUSER || "student",
-  password: process.env.PGPASSWORD ?? "student",
-});
+/** DigitalOcean Managed Postgres and many clouds require TLS (`sslmode=require`). Set `PGSSL=true`. */
+function buildPoolConfig() {
+  const ssl =
+    process.env.PGSSL === "true" ||
+    process.env.PGSSL === "1" ||
+    process.env.PGSSLMODE === "require"
+      ? { rejectUnauthorized: false }
+      : undefined;
+  return {
+    host: process.env.PGHOST || "localhost",
+    port: Number(process.env.PGPORT || 5432),
+    database: process.env.PGDATABASE || "siteinfo",
+    user: process.env.PGUSER || "student",
+    password: process.env.PGPASSWORD ?? "student",
+    ...(ssl ? { ssl } : {}),
+  };
+}
+
+const pool = new Pool(buildPoolConfig());
 
 /**
  * Smoke test used by al.js before listen(): avoids starting Express when Postgres is down/misconfigured,
