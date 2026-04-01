@@ -4,7 +4,11 @@ import AccessibleLineChart from "../components/AccessibleLineChart";
 import AlertCard from "../components/AlertCard";
 import { HomeSkeleton } from "../components/Skeleton";
 import { THRESHOLDS_F } from "../config/thresholds";
-import { getCurrentReading, getTwoWeeksData } from "../services/api";
+import {
+  getCurrentReadingAlt,
+  getTwoWeeksData,
+  subscribeReadingUpdates,
+} from "../services/api";
 import { computeAlerts } from "../services/alerts";
 import { transformToFrontendFormat, transformTo24HourChart } from "../services/dataTransform";
 import { formatTimestamp, celsiusToFahrenheit } from "../utils/conversions";
@@ -13,6 +17,17 @@ import {
   buildExternalTempFMapForDate,
   getSyntheticExternalTempF,
 } from "../services/weather";
+
+/**
+ * Fallback poll if SSE disconnects. Default 5s — worst-case delay without push.
+ * Set `VITE_HOME_POLL_MS` (e.g. `30000` for 30s) to reduce request rate.
+ */
+const HOME_POLL_MS = (() => {
+  const raw =
+    typeof import.meta !== "undefined" ? import.meta.env?.VITE_HOME_POLL_MS : undefined;
+  const n = raw != null && String(raw).trim() !== "" ? Number(raw) : NaN;
+  return Number.isFinite(n) && n >= 3000 ? n : 5_000;
+})();
 
 export default function HomeScreen() {
   const [readings, setReadings] = useState(null);
@@ -23,17 +38,37 @@ export default function HomeScreen() {
   const [updatedAt, setUpdatedAt] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [empty, setEmpty] = useState(false);
 
   useEffect(() => {
-    async function fetchData() {
+    /** @param {boolean} silent When true, skip full-page loading skeleton (background poll / tab focus). */
+    async function fetchData(silent = false) {
       try {
-        setLoading(true);
+        if (!silent) {
+          setLoading(true);
+        }
         setError(null);
+        setEmpty(false);
 
-        const [current, twoWeeks] = await Promise.all([
-          getCurrentReading(),
+        const [latest, twoWeeks] = await Promise.all([
+          getCurrentReadingAlt(),
           getTwoWeeksData(),
         ]);
+
+        const current =
+          latest ??
+          (twoWeeks.length > 0 ? twoWeeks[twoWeeks.length - 1] : null);
+
+        if (current == null) {
+          setReadings(null);
+          setChartData([]);
+          setChartDateStr(null);
+          setExternalTempByHour(null);
+          setCurrentOutsideTempF(null);
+          setUpdatedAt("");
+          setEmpty(true);
+          return;
+        }
 
         const frontendReadings = transformToFrontendFormat(current);
         setReadings(frontendReadings);
@@ -81,19 +116,45 @@ export default function HomeScreen() {
           setCurrentOutsideTempF(null);
         }
 
-        setUpdatedAt(formatTimestamp(current.timestamp));
+        setUpdatedAt(
+          current.timestamp ? formatTimestamp(current.timestamp) : ""
+        );
       } catch (err) {
         console.error("Error fetching data:", err);
-        setError("Failed to load data. Please check if the backend server is running.");
+        const msg =
+          err instanceof Error && err.message
+            ? err.message
+            : "Failed to load data.";
+        setError(
+          msg.includes("fetch") || msg.includes("Network")
+            ? "Cannot reach the API. Start the backend (npm run dev:backend) and check VITE_API_BASE in .env."
+            : msg
+        );
       } finally {
-        setLoading(false);
+        if (!silent) {
+          setLoading(false);
+        }
       }
     }
 
-    fetchData();
+    fetchData(false);
 
-    const interval = setInterval(fetchData, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    const unsubscribe = subscribeReadingUpdates(() => fetchData(true));
+
+    const interval = setInterval(() => fetchData(true), HOME_POLL_MS);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        fetchData(true);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   if (loading) {
@@ -106,6 +167,23 @@ export default function HomeScreen() {
         <div className="center">
           <div className="h1" style={{ color: 'var(--danger)' }}>Error</div>
           <div className="smallMuted">{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (empty) {
+    return (
+      <div className="page">
+        <div className="center">
+          <div className="h1">No sensor data yet</div>
+          <div className="smallMuted" style={{ maxWidth: 520, lineHeight: 1.5 }}>
+            The backend is up, but there are no temperature rows in the database for the
+            configured hive. Load schema if needed (
+            <code style={{ fontSize: 12 }}>src/backend/database/database_initial.sql</code>
+            ), then insert readings from your pipeline or run{" "}
+            <code style={{ fontSize: 12 }}>npm run db:seed</code> for demo points.
+          </div>
         </div>
       </div>
     );
@@ -133,31 +211,55 @@ export default function HomeScreen() {
         <div className="heroMetric">
           <div className="heroMetricLabel">Inside hive temperature</div>
           <div className="heroMetricValue">
-            {readings.internalTemp.toFixed(1)}°F
+            {readings.internalTemp.toFixed(2)}°F
           </div>
         </div>
       </div>
 
       <div className="grid2">
-        <GaugeCard
-          value={readings.humidity}
-          label="Humidity"
-          unit="%"
-          min={THRESHOLDS_F.humidityPct.min}
-          max={THRESHOLDS_F.humidityPct.max}
-          ranges={THRESHOLDS_F.humidityPct.ranges}
-          decimals={0}
-        />
+        {readings.humidity != null && !Number.isNaN(readings.humidity) ? (
+          <GaugeCard
+            value={readings.humidity}
+            label="Humidity"
+            unit="%"
+            min={THRESHOLDS_F.humidityPct.min}
+            max={THRESHOLDS_F.humidityPct.max}
+            ranges={THRESHOLDS_F.humidityPct.ranges}
+            decimals={0}
+          />
+        ) : (
+          <div className="gaugeCard" role="status">
+            <div className="gaugeCardValue" style={{ color: "var(--text-muted)" }}>
+              —
+            </div>
+            <div className="gaugeCardLabel">Humidity</div>
+            <div className="gaugeCardStatus" data-status="gray">
+              No humidity data from API yet
+            </div>
+          </div>
+        )}
 
-        <GaugeCard
-          value={readings.co2}
-          label="CO2"
-          unit="%"
-          min={THRESHOLDS_F.co2Pct.min}
-          max={THRESHOLDS_F.co2Pct.max}
-          ranges={THRESHOLDS_F.co2Pct.ranges}
-          decimals={2}
-        />
+        {readings.co2 != null && !Number.isNaN(readings.co2) ? (
+          <GaugeCard
+            value={readings.co2}
+            label="CO2"
+            unit="%"
+            min={THRESHOLDS_F.co2Pct.min}
+            max={THRESHOLDS_F.co2Pct.max}
+            ranges={THRESHOLDS_F.co2Pct.ranges}
+            decimals={2}
+          />
+        ) : (
+          <div className="gaugeCard" role="status">
+            <div className="gaugeCardValue" style={{ color: "var(--text-muted)" }}>
+              —
+            </div>
+            <div className="gaugeCardLabel">CO2</div>
+            <div className="gaugeCardStatus" data-status="gray">
+              Not reported by current sensor
+            </div>
+          </div>
+        )}
       </div>
 
       <section className="pageSection" aria-labelledby="hardware-heading">
@@ -169,11 +271,15 @@ export default function HomeScreen() {
           </div>
           <div className="hardwareInfoCard" aria-label="Package loss">
             <span className="hardwareInfoLabel">Package loss</span>
-            <span className="hardwareInfoValue">{readings.packageLoss}</span>
+            <span className="hardwareInfoValue">
+              {readings.packageLoss != null ? readings.packageLoss : "—"}
+            </span>
           </div>
           <div className="hardwareInfoCard" aria-label="Battery level">
             <span className="hardwareInfoLabel">Battery</span>
-            <span className="hardwareInfoValue">{readings.batteryPct}%</span>
+            <span className="hardwareInfoValue">
+              {readings.batteryPct != null ? `${readings.batteryPct}%` : "—"}
+            </span>
           </div>
         </div>
       </section>

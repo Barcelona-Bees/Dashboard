@@ -1,5 +1,5 @@
 /**
- * Convert Celsius to Fahrenheit
+ * Convert Celsius to Fahrenheit (used for Open-Meteo weather only — hive DB temps are °F).
  */
 export function celsiusToFahrenheit(c) {
     return (c * 9/5) + 32;

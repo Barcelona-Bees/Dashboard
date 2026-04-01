@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { fake } from "../data/fake";
+import { useState, useEffect } from "react";
+import { getCurrentReading } from "../services/api";
+import { transformToFrontendFormat } from "../services/dataTransform";
 
 function Toggle({ value, onChange, label }) {
   return (
@@ -23,16 +24,42 @@ export default function AccountScreen({ onLogout }) {
   const [notif, setNotif] = useState(true);
   const [texts, setTexts] = useState(true);
   const [emails, setEmails] = useState(true);
+  const [summary, setSummary] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const point = await getCurrentReading();
+        if (!cancelled) {
+          setSummary(point ? transformToFrontendFormat(point) : null);
+        }
+      } catch {
+        if (!cancelled) setSummary(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="page">
       <div className="profileCard">
-        <div className="avatar" aria-label="Profile avatar">KB</div>
+        <div className="avatar" aria-label="Profile avatar">
+          KB
+        </div>
 
-        <div className="profileName">Kimberly<br />Bee</div>
+        <div className="profileName">
+          Kimberly
+          <br />
+          Bee
+        </div>
 
         <div className="profileEmailWrap">
-          <div style={{ fontWeight: 800, fontSize: 12, marginBottom: 4 }}>Email:</div>
+          <div style={{ fontWeight: 800, fontSize: 12, marginBottom: 4 }}>
+            Email:
+          </div>
           <input value="kimberlybee@gmail.com" readOnly />
         </div>
 
@@ -42,21 +69,23 @@ export default function AccountScreen({ onLogout }) {
 
         <div className="statsRow">
           <div className="statBox statGreen">
-            97%
+            {summary?.batteryPct != null ? `${summary.batteryPct}%` : "—"}
             <small>Battery Health</small>
           </div>
           <div className="statBox statYellow">
-            {fake.readings.packageLoss}
+            {summary?.packageLoss != null ? summary.packageLoss : "—"}
             <small>Packet Loss</small>
           </div>
           <div className="statBox statBlue">
-            1
+            —
             <small>Active Sensors</small>
           </div>
         </div>
 
         <span className="linkBtn">Reset password</span>
-        <span className="linkBtn" onClick={onLogout}>Logout</span>
+        <span className="linkBtn" onClick={onLogout}>
+          Logout
+        </span>
 
         <div className="danger">Delete Account</div>
       </div>
