@@ -212,7 +212,6 @@ export default function HomeScreen() {
         fetchData(true);
       }, SSE_DEBOUNCE_MS);
     }
-
     if (initialSnap) {
       fetchData(true);
     } else {
