@@ -1,4 +1,6 @@
-name: Docker
+# Pushes ghcr.io/...:latest — ONLY when main/master updates (protects prod image).
+# Work on a feature branch: use CI workflow above; merge to main when ready to ship.
+name: Docker publish
 
 on:
   push:
