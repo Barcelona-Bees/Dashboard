@@ -27,11 +27,22 @@ import { isValidDateValue, toNumericReading } from "../busLayer/utils.js";
 import { verifyDatabaseConnection } from "../dataLinkLayer/dbutils.js";
 import { time } from "node:console";
 
-/** True when this file is the process entrypoint (not when Jest or another module imports it). */
-const isMainModule =
-    Boolean(process.argv[1]) &&
-    path.resolve(fileURLToPath(import.meta.url)) ===
-        path.resolve(process.argv[1]);
+// Checks if the server should be started based on what starts it
+function shouldStartHttpServer() {
+    // Never auto-listen under Jest.
+    if (process.env.JEST_WORKER_ID || process.env.NODE_ENV === "test") return false;
+    // PM2 always sets pm_id for managed processes.
+    if (process.env.pm_id != null) return true;
+    // Direct invocation: node .../al.js
+    const argv1 = process.argv?.[1];
+    if (argv1 && path.resolve(argv1) === path.resolve(fileURLToPath(import.meta.url))) {
+        return true;
+    }
+    // Default: behave like an app entrypoint.
+    return true;
+}
+
+const shouldStartServer = shouldStartHttpServer();
 
 const app = express();
 const DEFAULT_HIVE_ID = 1;
@@ -45,6 +56,11 @@ app.use((req, res, next) => {
     }
     next();
 });
+
+app.use(((req, res, next) =>{
+    console.log(req.path);
+    next();
+}));
 
 app.use(express.json());
 
@@ -96,14 +112,33 @@ function round(date) {
  * Lower bound for valid queries: Hive.startDate (pg may return startdate / startDate keys).
  * Future dates are treated as invalid metadata so `dateOutOfRange(today)` does not return true
  * (that used to yield HTTP 400 on /temp/twoweeks and broke the dashboard with no data).
+ *
+ * Cached briefly: same value is read many times per request (`dateOutOfRange`) and across
+ * concurrent GETs; start date rarely changes, so this cuts repeated DB round-trips on the VM.
  */
+const HIVE_START_CACHE_MS = 60_000;
+let hiveStartCache = { hiveId: /** @type {number|null} */ (null), expiresAt: 0, value: /** @type {Date|null} */ (null) };
+
 async function getHiveStartDate(hiveID = DEFAULT_HIVE_ID) {
+    const now = Date.now();
+    if (
+        hiveStartCache.hiveId === hiveID &&
+        hiveStartCache.value != null &&
+        now < hiveStartCache.expiresAt
+    ) {
+        return hiveStartCache.value;
+    }
     const row = await getStartTime(hiveID);
     const raw = row?.startdate ?? row?.startDate;
-    if (!raw) return new Date(0);
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return new Date(0);
-    if (d.getTime() > Date.now()) return new Date(0);
+    let d;
+    if (!raw) {
+        d = new Date(0);
+    } else {
+        d = new Date(raw);
+        if (Number.isNaN(d.getTime())) d = new Date(0);
+        else if (d.getTime() > Date.now()) d = new Date(0);
+    }
+    hiveStartCache = { hiveId: hiveID, expiresAt: now + HIVE_START_CACHE_MS, value: d };
     return d;
 }
 
@@ -145,7 +180,9 @@ app.get("/temp/measurement", async (req, res) => {
  */
 app.get("/temp/measurement/latest", async (req, res) => {
     try {
+        console.log("before the database");
         const result = await getLatestTemperatureReading(DEFAULT_HIVE_ID);
+        console.log("after the database");
         const measurement = result.rows?.[0]?.reading ?? null;
         const timestamp = result.rows?.[0]?.timestamp ?? null;
         return res.status(200).json({ measurement, timestamp });
@@ -550,27 +587,33 @@ app.post("/upload/Humidity", async (req, res) => {
 
 
 app.post("/uploadall/", async (req, res) => {
-    const { temp, humidity, timestamp, passkey } = req.body;
+// console.log("THIS IS THE DAT #####################", req);
+    const data = req.body.uplink_message.decoded_payload;
+
+// console.log("THIS IS THE DAT #####################", data);
+    
+
+    const { temp, humidity, timestamp, passkey } = data;
 
     if (!passkey) {
-        return res.status(400).json({ error: "Invalid passkey" });
+        return res.status(200).json({ error: " Passkey is not present" });
     }
     const hiveID = await testPasskey(passkey);
     if (hiveID === -1) {
-        return res.status(400).json({ error: "Invalid passkey" });
+        return res.status(200).json({ error: "Invalid passkey match" });
     }
     const ts = timestamp instanceof Date ? timestamp : new Date(timestamp);
     if (!isValidDateValue(ts)) {
-        return res.status(400).json({ error: "timestamp is invalid" });
+        return res.status(200).json({ error: "timestamp is invalid" });
     }
     const tempNum = toNumericReading(temp);
     if (tempNum === null) {
-        return res.status(400).json({ error: "temperarutre is not a number" });
+        return res.status(200).json({ error: "temperarutre is not a number" });
     }
 
     const humNum = toNumericReading(humidity);
     if (humNum === null) {
-        return res.status(400).json({ error: "humidity is not a number" });
+        return res.status(200).json({ error: "humidity is not a number" });
     }
 
     try {
@@ -584,34 +627,43 @@ app.post("/uploadall/", async (req, res) => {
     return res.status(200).json({ success: true });
 });
 
-const PORT = Number(process.env.PORT) || 3001;
+//Serves the frontend
+const distDir = path.resolve(process.cwd(), "dist");
+const indexHtmlPath = path.join(distDir, "index.html");
+app.use(express.static(distDir));
+function sendIndexHtml(res) {
+    if (!fs.existsSync(indexHtmlPath)) {
+        return res
+            .status(404)
+            .type("text/plain")
+            .send(`Missing frontend build: ${indexHtmlPath}\nRun: npm run build`);
+    }
+    return res.sendFile(indexHtmlPath, (err) => {
+        if (err) {
+            // Ensure the request never hangs if sendFile errors.
+            if (!res.headersSent) {
+                res.status(500).type("text/plain").send(String(err));
+            } else {
+                res.end();
+            }
+        }
+    });
+}
+app.get("/", (req, res) => sendIndexHtml(res));
+app.get(/.*/, (req, res) => sendIndexHtml(res));
+
+const PORT = Number(process.env.PORT) || 3000;
 
 export { app };
 
-if (isMainModule) {
-    // Async IIFE: verify DB before app.listen so operators get one clear error (and exit 1) instead of 500s per route.
+if (shouldStartServer) {
     (async () => {
-        const dbCheck = await verifyDatabaseConnection();
-        if (!dbCheck.ok) {
-            console.error("[db] Cannot connect to PostgreSQL:", dbCheck.message);
-            console.error(
-                "[db] Expected role/database: student / siteinfo (see .env.example).\n" +
-                    "[db] Create them once with a superuser account, e.g.:\n" +
-                    "     npm run db:setup\n" +
-                    "     (uses psql -U postgres — avoids defaulting to your macOS login as the DB role)"
-            );
-            process.exit(1);
-        }
-        console.log(
-            "[db] OK —",
-            process.env.PGUSER || "student",
-            "@",
-            process.env.PGHOST || "localhost",
-            "/",
-            process.env.PGDATABASE || "siteinfo"
-        );
+        // Start listening first. (Under PM2 we saw the DB preflight can hang, leaving the process "online"
+        // but with no open port and resulting in 503s from upstream.)
+        const server = app.listen(PORT, "0.0.0.0");
 
-        const server = app.listen(PORT);
+        // Disable keep-alive at the Node layer when requested. This pairs with FORCE_CONNECTION_CLOSE
+        // to work around strict proxies that only allow one concurrent connection per client.
 
         server.once("error", (err) => {
             console.error("Failed to start server:", err.message);
@@ -632,5 +684,25 @@ if (isMainModule) {
                 `Backend listening on http://${host === "::" ? "localhost" : host}:${port}`
             );
         });
+
+        // Run DB connectivity check in the background and log the result.
+        // If Postgres is down, the server stays up (static frontend still works) and API calls will error normally.
+        try {
+            const dbCheck = await verifyDatabaseConnection();
+            if (!dbCheck.ok) {
+                console.error("[db] Cannot connect to PostgreSQL:", dbCheck.message);
+            } else {
+                console.log(
+                    "[db] OK —",
+                    process.env.PGUSER || "student",
+                    "@",
+                    process.env.PGHOST || "localhost",
+                    "/",
+                    process.env.PGDATABASE || "siteinfo"
+                );
+            }
+        } catch (e) {
+            console.error("[db] Preflight threw:", String(e));
+        }
     })();
 }

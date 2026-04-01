@@ -91,16 +91,12 @@ async function enrichLatestHumidity(points) {
 }
 
 async function fetchTempAndHumidityRows(tempPath, humidityPath) {
-  const tempJson = await fetchMeasurementJson(tempPath);
+  const [tempJson, humJson] = await Promise.all([
+    fetchMeasurementJson(tempPath),
+    fetchMeasurementJson(humidityPath).catch(() => ({ measurement: [] })),
+  ]);
   const tempRows = measurementRows(tempJson);
-  let humRows = [];
-  try {
-    const humJson = await fetchMeasurementJson(humidityPath);
-    humRows = measurementRows(humJson);
-  } catch {
-    // Humidity table may be empty or endpoint down — still show temperature-only series.
-    humRows = [];
-  }
+  const humRows = measurementRows(humJson);
   let merged = mergeHumidityOntoTempRows(tempRows, humRows);
   merged = await enrichLatestHumidity(merged);
   return merged;
@@ -146,20 +142,18 @@ export async function getCurrentReading() {
  */
 export async function getCurrentReadingAlt() {
   try {
-    const t = await fetchMeasurementJson("/temp/measurement/latest");
+    const [t, h] = await Promise.all([
+      fetchMeasurementJson("/temp/measurement/latest"),
+      fetchMeasurementJson("/Humidity/measurement/latest").catch(() => null),
+    ]);
     if (t.measurement == null) return null;
     const temperatureF = parseFloat(t.measurement);
     if (Number.isNaN(temperatureF)) return null;
 
     let hum = null;
-    try {
-      const h = await fetchMeasurementJson("/Humidity/measurement/latest");
-      if (h.measurement != null) {
-        const v = parseFloat(h.measurement);
-        if (!Number.isNaN(v)) hum = v;
-      }
-    } catch {
-      /* humidity optional */
+    if (h && h.measurement != null) {
+      const v = parseFloat(h.measurement);
+      if (!Number.isNaN(v)) hum = v;
     }
 
     const ts =
