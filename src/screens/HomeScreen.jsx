@@ -19,15 +19,18 @@ import {
 } from "../services/weather";
 
 /**
- * Fallback poll if SSE disconnects. Default 5s — worst-case delay without push.
- * Set `VITE_HOME_POLL_MS` (e.g. `30000` for 30s) to reduce request rate.
+ * Fallback poll when SSE is unavailable. Default 30s to avoid overloading the API/VM;
+ * SSE pushes still refresh immediately (debounced). Override with `VITE_HOME_POLL_MS` (min 3000).
  */
 const HOME_POLL_MS = (() => {
   const raw =
     typeof import.meta !== "undefined" ? import.meta.env?.VITE_HOME_POLL_MS : undefined;
   const n = raw != null && String(raw).trim() !== "" ? Number(raw) : NaN;
-  return Number.isFinite(n) && n >= 3000 ? n : 5_000;
+  return Number.isFinite(n) && n >= 3000 ? n : 30_000;
 })();
+
+/** Coalesce burst SSE `reading` events into one refresh. */
+const SSE_DEBOUNCE_MS = 350;
 
 export default function HomeScreen() {
   const [readings, setReadings] = useState(null);
@@ -41,8 +44,14 @@ export default function HomeScreen() {
   const [empty, setEmpty] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    let fetchInFlight = false;
+    let sseDebounceTimer = null;
+
     /** @param {boolean} silent When true, skip full-page loading skeleton (background poll / tab focus). */
     async function fetchData(silent = false) {
+      if (fetchInFlight) return;
+      fetchInFlight = true;
       try {
         if (!silent) {
           setLoading(true);
@@ -54,6 +63,8 @@ export default function HomeScreen() {
           getCurrentReadingAlt(),
           getTwoWeeksData(),
         ]);
+
+        if (cancelled) return;
 
         const current =
           latest ??
@@ -85,6 +96,7 @@ export default function HomeScreen() {
 
         try {
           const weatherMap = await getHourlyOutsideTempsByDate();
+          if (cancelled) return;
           const now = new Date();
           const todayStr = now.toISOString().split("T")[0];
           const hourLabel = `${now.getHours()}:00`;
@@ -112,14 +124,17 @@ export default function HomeScreen() {
           }
         } catch (weatherErr) {
           console.warn("Outside temp from weather API unavailable, using estimate:", weatherErr);
-          setExternalTempByHour(null);
-          setCurrentOutsideTempF(null);
+          if (!cancelled) {
+            setExternalTempByHour(null);
+            setCurrentOutsideTempF(null);
+          }
         }
 
         setUpdatedAt(
           current.timestamp ? formatTimestamp(current.timestamp) : ""
         );
       } catch (err) {
+        if (cancelled) return;
         console.error("Error fetching data:", err);
         const msg =
           err instanceof Error && err.message
@@ -131,15 +146,26 @@ export default function HomeScreen() {
             : msg
         );
       } finally {
-        if (!silent) {
+        fetchInFlight = false;
+        if (!silent && !cancelled) {
           setLoading(false);
         }
       }
     }
 
+    function scheduleSseRefresh() {
+      if (sseDebounceTimer != null) {
+        clearTimeout(sseDebounceTimer);
+      }
+      sseDebounceTimer = setTimeout(() => {
+        sseDebounceTimer = null;
+        fetchData(true);
+      }, SSE_DEBOUNCE_MS);
+    }
+
     fetchData(false);
 
-    const unsubscribe = subscribeReadingUpdates(() => fetchData(true));
+    const unsubscribe = subscribeReadingUpdates(scheduleSseRefresh);
 
     const interval = setInterval(() => fetchData(true), HOME_POLL_MS);
 
@@ -151,6 +177,10 @@ export default function HomeScreen() {
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
+      cancelled = true;
+      if (sseDebounceTimer != null) {
+        clearTimeout(sseDebounceTimer);
+      }
       unsubscribe();
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisible);
