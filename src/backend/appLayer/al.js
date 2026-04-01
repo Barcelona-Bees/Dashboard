@@ -4,6 +4,7 @@
  */
 // Application layer – Express API over hive data (calls bl functions to send data to frontend)
 
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -25,7 +26,6 @@ import {
 import { isValidDateValue, toNumericReading } from "../busLayer/utils.js";
 // Startup DB check (see dbutils.verifyDatabaseConnection) — keeps PR behavior: no silent half-running server.
 import { verifyDatabaseConnection } from "../dataLinkLayer/dbutils.js";
-import { time } from "node:console";
 
 /** True when this file is the process entrypoint (not when Jest or another module imports it). */
 const isMainModule =
@@ -603,6 +603,34 @@ app.post("/uploadall/", async (req, res) => {
     return res.status(200).json({ success: true });
 });
 
+/**
+ * Production / Docker: serve Vite `dist/` from the same origin so `VITE_API_BASE` can be empty.
+ * Local dev: skip unless `dist/index.html` exists and SERVE_STATIC is not "0".
+ */
+const __appDir = path.dirname(fileURLToPath(import.meta.url));
+const distPath = path.resolve(__appDir, "../../../dist");
+const distIndex = path.join(distPath, "index.html");
+const shouldServeStatic =
+    fs.existsSync(distIndex) &&
+    (process.env.NODE_ENV === "production" || process.env.SERVE_STATIC === "1");
+
+if (shouldServeStatic) {
+    app.use(
+        express.static(distPath, {
+            fallthrough: true,
+            index: false,
+        })
+    );
+    app.get("*", (req, res, next) => {
+        if (req.method !== "GET" && req.method !== "HEAD") {
+            return next();
+        }
+        res.sendFile(distIndex, (err) => {
+            if (err) next(err);
+        });
+    });
+}
+
 const PORT = Number(process.env.PORT) || 3001;
 
 export { app };
@@ -650,6 +678,9 @@ if (isMainModule) {
             console.log(
                 `Backend listening on http://${host === "::" ? "localhost" : host}:${port}`
             );
+            if (shouldServeStatic) {
+                console.log("[static] Vite UI from dist/ (same origin as API)");
+            }
         });
     })();
 }

@@ -1,0 +1,34 @@
+# Local smoke test: Postgres + app on http://localhost:8080
+# Apply schema once: psql or copy SQL from src/backend/database/ against this DB.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: student
+      POSTGRES_PASSWORD: student
+      POSTGRES_DB: siteinfo
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build:
+      context: .
+      args:
+        VITE_API_BASE: ""
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: student
+      PGPASSWORD: student
+      PGDATABASE: siteinfo
+    depends_on:
+      - db
+
+volumes:
+  pgdata:

@@ -5,9 +5,13 @@
  * Temperature values are treated as °F at the dashboard layer (matches DB `reading` for this project).
  */
 
-const API_BASE =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE) ||
-  "http://localhost:3001";
+/** Empty string = same origin (Docker / single Express host). Undefined = dev default. */
+const API_BASE = (() => {
+  if (typeof import.meta === "undefined") return "http://localhost:3001";
+  const v = import.meta.env?.VITE_API_BASE;
+  if (v !== undefined) return String(v);
+  return "http://localhost:3001";
+})();
 
 /**
  * Normalized row for charts/KPIs. `temperatureF` matches DB column `reading`
