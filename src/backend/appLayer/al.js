@@ -96,14 +96,33 @@ function round(date) {
  * Lower bound for valid queries: Hive.startDate (pg may return startdate / startDate keys).
  * Future dates are treated as invalid metadata so `dateOutOfRange(today)` does not return true
  * (that used to yield HTTP 400 on /temp/twoweeks and broke the dashboard with no data).
+ *
+ * Cached briefly: same value is read many times per request (`dateOutOfRange`) and across
+ * concurrent GETs; start date rarely changes, so this cuts repeated DB round-trips on the VM.
  */
+const HIVE_START_CACHE_MS = 60_000;
+let hiveStartCache = { hiveId: /** @type {number|null} */ (null), expiresAt: 0, value: /** @type {Date|null} */ (null) };
+
 async function getHiveStartDate(hiveID = DEFAULT_HIVE_ID) {
+    const now = Date.now();
+    if (
+        hiveStartCache.hiveId === hiveID &&
+        hiveStartCache.value != null &&
+        now < hiveStartCache.expiresAt
+    ) {
+        return hiveStartCache.value;
+    }
     const row = await getStartTime(hiveID);
     const raw = row?.startdate ?? row?.startDate;
-    if (!raw) return new Date(0);
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return new Date(0);
-    if (d.getTime() > Date.now()) return new Date(0);
+    let d;
+    if (!raw) {
+        d = new Date(0);
+    } else {
+        d = new Date(raw);
+        if (Number.isNaN(d.getTime())) d = new Date(0);
+        else if (d.getTime() > Date.now()) d = new Date(0);
+    }
+    hiveStartCache = { hiveId: hiveID, expiresAt: now + HIVE_START_CACHE_MS, value: d };
     return d;
 }
 
