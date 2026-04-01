@@ -1,4 +1,6 @@
-# Runs on every branch and every PR — you do not need to push to main for checks.
+# Runs on every branch and PR.
+# On PUSH (not PR): also publishes ghcr.io/<owner>/<repo>:latest so you can deploy without merging to main.
+# PRs only build the image (push: false) — no registry write.
 name: CI
 
 on:
@@ -27,20 +29,38 @@ jobs:
         env:
           VITE_API_BASE: ""
 
-  # Confirms Dockerfile works on your branch without publishing any image.
   docker-build:
     runs-on: ubuntu-latest
     needs: test-and-build
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata (image name, lowercase)
+        id: meta
+        run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_LC=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          echo "image=ghcr.io/${OWNER_LC}/${REPO_LC}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Docker build (no push)
+      - name: Docker build (push to GHCR only on branch push, not on PRs)
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: false
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.image }}:latest
           build-args: |
             VITE_API_BASE=

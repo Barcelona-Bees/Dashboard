@@ -37,28 +37,23 @@ Example: owner `MyTeam`, repo `Dashboard` → `ghcr.io/myteam/dashboard:latest`
 
 ## 2. Part A — Publish the Docker image to GHCR (GitHub)
 
-### 2.1 Push your latest code
+### 2.1 Push your latest code (this publishes the image)
 
-Commit everything you want in the image and push your branch to GitHub.
+The **`CI`** workflow (`.github/workflows/ci.yml`) **on every `git push`** to **any branch**:
 
-### 2.2 Run the “Docker publish” workflow
+1. Runs tests + Vite build  
+2. **Builds the Docker image and pushes** `ghcr.io/<owner-lowercase>/<repo-lowercase>:latest` to GitHub Container Registry  
 
-1. Open your repo on **GitHub** in a browser.
-2. Click the **Actions** tab (top menu).
-3. In the left sidebar, click **Docker publish** (under “All workflows”).
-4. Click **Run workflow** (right side, gray button).
-5. **Use workflow from**: choose **Branch** → select the branch that has your `Dockerfile` (e.g. `optimizating-for-api-calls` or `main`).
-6. Click the green **Run workflow** button.
-7. Wait for the workflow to finish (green check). If it fails, open the run → read the red step (often npm or Docker).
+You **do not** need a separate “Docker publish” workflow or a merge to `main` for that push.
 
-### 2.3 Confirm the image exists
+**Pull requests** only run `docker build` with **no push** (so forks don’t need registry access).
 
-1. GitHub → your **profile picture** (top right) → **Your profile** (or open `https://github.com/<you>?tab=packages`).
-2. Click **Packages** (or go to **Repositories** → your repo → right column **Packages**).
-3. You should see a package named like your repo (e.g. `dashboard`). Open it.
-4. Copy the **full image URL** shown (often `ghcr.io/owner/repo:latest`). That is what you paste into DigitalOcean.
+### 2.2 Confirm the image exists
 
-### 2.4 Public vs private image (choose one)
+1. After a **green** CI run on a **push**, GitHub → your **profile** → **Packages** (or the repo’s **Packages** link).
+2. Open the package → copy **`ghcr.io/owner/repo:latest`** (all lowercase).
+
+### 2.3 Public vs private image (choose one)
 
 **Option A — Public package (simplest for class projects)**
 
