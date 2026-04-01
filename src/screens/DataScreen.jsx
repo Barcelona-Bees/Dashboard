@@ -146,7 +146,6 @@ export default function DataScreen({ onOpenExport }) {
 
 export function ExportModal({ onClose }) {
   const [temp, setTemp] = useState(true);
-  const [co2, setCo2] = useState(true);
   const [humidity, setHumidity] = useState(true);
   const [type, setType] = useState("CSV");
 
@@ -162,14 +161,6 @@ export function ExportModal({ onClose }) {
             onChange={(e) => setTemp(e.target.checked)}
           />{" "}
           Temp
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={co2}
-            onChange={(e) => setCo2(e.target.checked)}
-          />{" "}
-          co2
         </label>
         <label>
           <input

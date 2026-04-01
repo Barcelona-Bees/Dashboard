@@ -44,15 +44,4 @@ export const THRESHOLDS_F = {
     ],
   },
 
-  // CO2 shown as percent in your UI
-  co2Pct: {
-    min: 0,
-    max: 5,
-    ranges: [
-      { from: 0.0, to: 0.2, color: "yellow", label: "low-ish" },
-      { from: 0.2, to: 1.0, color: "green",  label: "normal" },
-      { from: 1.0, to: 2.0, color: "yellow", label: "elevated" },
-      { from: 2.0, to: 5.0, color: "red",    label: "high" },
-    ],
-  },
 };

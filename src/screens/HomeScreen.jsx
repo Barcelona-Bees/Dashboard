@@ -9,7 +9,10 @@ import {
   getTwoWeeksData,
   subscribeReadingUpdates,
 } from "../services/api";
-import { computeAlerts } from "../services/alerts";
+import {
+  collectAlertsFromPoints,
+  filterPointsInLocalCalendarDay,
+} from "../services/alerts";
 import { transformToFrontendFormat, transformTo24HourChart } from "../services/dataTransform";
 import { formatTimestamp, celsiusToFahrenheit } from "../utils/conversions";
 import {
@@ -51,6 +54,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(!initialSnap);
   const [error, setError] = useState(null);
   const [empty, setEmpty] = useState(initialSnap?.empty ?? false);
+  const [todayAlerts, setTodayAlerts] = useState(initialSnap?.todayAlerts ?? []);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,7 +100,9 @@ export default function HomeScreen() {
             currentOutsideTempF: null,
             updatedAt: "",
             empty: true,
+            todayAlerts: [],
           });
+          setTodayAlerts([]);
           contentShownRef.current = true;
           lastOkFetchAt = Date.now();
           return;
@@ -108,6 +114,10 @@ export default function HomeScreen() {
         const last24h = twoWeeks.slice(-144);
         const chart24h = transformTo24HourChart(last24h);
         setChartData(chart24h);
+
+        const todayPoints = filterPointsInLocalCalendarDay(twoWeeks, new Date());
+        const todayAlertsList = collectAlertsFromPoints(todayPoints);
+        setTodayAlerts(todayAlertsList);
 
         const dateStr =
           last24h.length > 0
@@ -167,6 +177,7 @@ export default function HomeScreen() {
           currentOutsideTempF: outsideF,
           updatedAt: updated,
           empty: false,
+          todayAlerts: todayAlertsList,
         });
         contentShownRef.current = true;
         lastOkFetchAt = Date.now();
@@ -311,28 +322,6 @@ export default function HomeScreen() {
             </div>
           </div>
         )}
-
-        {readings.co2 != null && !Number.isNaN(readings.co2) ? (
-          <GaugeCard
-            value={readings.co2}
-            label="CO2"
-            unit="%"
-            min={THRESHOLDS_F.co2Pct.min}
-            max={THRESHOLDS_F.co2Pct.max}
-            ranges={THRESHOLDS_F.co2Pct.ranges}
-            decimals={2}
-          />
-        ) : (
-          <div className="gaugeCard" role="status">
-            <div className="gaugeCardValue" style={{ color: "var(--text-muted)" }}>
-              —
-            </div>
-            <div className="gaugeCardLabel">CO2</div>
-            <div className="gaugeCardStatus" data-status="gray">
-              Not reported by current sensor
-            </div>
-          </div>
-        )}
       </div>
 
       <section className="pageSection" aria-labelledby="hardware-heading">
@@ -346,12 +335,6 @@ export default function HomeScreen() {
             <span className="hardwareInfoLabel">Package loss</span>
             <span className="hardwareInfoValue">
               {readings.packageLoss != null ? readings.packageLoss : "—"}
-            </span>
-          </div>
-          <div className="hardwareInfoCard" aria-label="Battery level">
-            <span className="hardwareInfoLabel">Battery</span>
-            <span className="hardwareInfoValue">
-              {readings.batteryPct != null ? `${readings.batteryPct}%` : "—"}
             </span>
           </div>
         </div>
@@ -389,14 +372,17 @@ export default function HomeScreen() {
       </section>
 
       <section className="pageSection" aria-labelledby="alerts-heading">
-        <h2 id="alerts-heading" className="pageSectionTitle">Alerts</h2>
+        <h2 id="alerts-heading" className="pageSectionTitle">Today&apos;s alerts</h2>
+        <div className="smallMuted" style={{ marginBottom: 12 }}>
+          Readings from today (local time) that crossed humidity or temperature thresholds.
+        </div>
         <div className="stack">
-          {computeAlerts(readings).length === 0 ? (
+          {todayAlerts.length === 0 ? (
             <div className="emptyState">
-              No active alerts — hive looks healthy
+              No threshold alerts yet today — hive looks healthy
             </div>
           ) : (
-            computeAlerts(readings).map((a) => (
+            todayAlerts.map((a) => (
               <AlertCard
                 key={a.id}
                 type={a.type}

@@ -4,7 +4,6 @@ const items = [
   { key: "home", label: "Home" },
   { key: "alerts", label: "Notifications" },
   { key: "data", label: "All Data" },
-  { key: "account", label: "Account" },
 ];
 
 export default function SideMenu({ open, activeTab, onClose, onSelect }) {

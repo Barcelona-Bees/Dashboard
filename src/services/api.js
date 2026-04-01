@@ -103,6 +103,21 @@ async function fetchTempAndHumidityRows(tempPath, humidityPath) {
 }
 
 /**
+ * Temp + humidity merged rows for `[start, end]` without `/measurement/latest` enrichment
+ * (correct for historical alert replay).
+ * @param {Date} start
+ * @param {Date} end
+ */
+export async function getMergedRange(start, end) {
+  const qs = `?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
+  const [tempJson, humJson] = await Promise.all([
+    fetchMeasurementJson(`/temp/range${qs}`),
+    fetchMeasurementJson(`/Humidity/range${qs}`).catch(() => ({ measurement: [] })),
+  ]);
+  return mergeHumidityOntoTempRows(measurementRows(tempJson), measurementRows(humJson));
+}
+
+/**
  * Primary integration: temperature (+ humidity when available) for the default hive.
  * Shape aligns with a generic readings contract: hiveId, reading (numeric), timestamp, humidity.
  *
