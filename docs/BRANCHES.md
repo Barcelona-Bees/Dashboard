@@ -1,24 +1,46 @@
-# Branch split: site vs containerization
+# Branch strategy (site first, Docker later)
 
-After syncing with `origin/main`, the repo uses two integration branches:
+## Current focus: **`site-refinement`**
 
-| Branch | Purpose | Contents |
-|--------|---------|----------|
-| **`containerization`** | Deploy + CI + Docker + GHCR | Same commit as **`optimizating-for-api-calls`** right after merging `main`: includes `Dockerfile`, `.github/workflows` (CI with GHCR push), `DEPLOY.md`, `docker-compose.yml`, static serving in `al.js`, `PGSSL` in `dbutils`, etc. |
-| **`site-refinement`** | UX, polling, caching, alerts, no login | Same merge base **minus** deploy-only files (`Dockerfile`, `docker-compose`, `DEPLOY.md`, `.env.example`, `docker-publish.yml`). CI runs tests + build + Docker **build only** (no registry push). |
+All **UI/UX, performance, caching, alerts, and open access** work happens here. This branch **does not** include Dockerfiles, GHCR publish, or `DEPLOY.md` — so you can ship a polished app to your VM without thinking about images.
 
-## Merge order (suggested)
+**Day-to-day:**
 
-1. Open a PR **`site-refinement` → `main`** (product changes, easier to review).
-2. Then open a PR **`containerization` → `main`** (or merge `optimizating-for-api-calls` if it matches `containerization`) for deploy plumbing.
+```bash
+git checkout site-refinement
+git pull origin site-refinement
+```
 
-Alternatively merge **`containerization`** first if you need production Docker before UI lands — expect possible small conflicts in `al.js` / `api.js`.
+Merge to **`main`** when the product is ready for your class / live demo (separate from any Docker roadmap).
 
-## Syncing with `main` again later
+---
+
+## Deferred: **`containerization`**
+
+Docker, `docker-compose`, GitHub Actions image push to GHCR, and production static+API-in-one-container live on the **`containerization`** branch (same tip as **`optimizating-for-api-calls`** at the merge commit). **Pick this up later** when you are ready to containerize — nothing here blocks the refined site.
+
+To return to that work later:
+
+```bash
+git fetch origin
+git checkout containerization
+# or: git checkout optimizating-for-api-calls  # same deploy stack as containerization at merge
+```
+
+---
+
+## Summary
+
+| Branch | When to use |
+|--------|-------------|
+| **`site-refinement`** | **Now** — refine the live site, finalize behavior, then PR → `main`. |
+| **`containerization`** | **Later** — images, registry, DigitalOcean from Dockerfile, etc. |
+
+## Syncing either branch with updated `main`
 
 ```bash
 git fetch origin
 git checkout site-refinement   # or containerization
 git merge origin/main
-# resolve conflicts, test, push
+# resolve conflicts, npm test, push
 ```
