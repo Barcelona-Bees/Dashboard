@@ -312,10 +312,26 @@ app.get("/temp/twoweeks", async (req, res) => {
  * @returns json
  */
 app.get("/temp/range", async (req, res) => {
-    const start = new Date(req.query.start);
-    const end = new Date(req.query.end);
+    // replaces %3A with :
+    const startParam = req.query.start;
+    const endParam = req.query.end;
 
-    if (!isValidDateValue(start) || (await dateOutOfRange(start))) {
+    // console.log('startParam',startParam);
+    // console.log('endParam',endParam);
+
+    
+    const startTime = startParam.replaceAll("%3A",":");
+    const endTime = endParam.replaceAll("%3A",":");
+    
+    let start = new Date(startTime);
+    const end = new Date(endTime);
+
+    //tests to see if date is out of range and if it is put it to the hive start date
+    if (await dateOutOfRange(start)){
+        start = await getHiveStartDate(DEFAULT_HIVE_ID);
+    }
+
+    if (!isValidDateValue(start)) {
         return res.status(400).json({ error: "Invalid or out-of-range start date" });
     }
 
@@ -332,12 +348,13 @@ app.get("/temp/range", async (req, res) => {
         } else if (end.getTime() < hiveStart.getTime()) {
             endClamped = hiveStart;
         }
+
         const lo = new Date(Math.min(start.getTime(), endClamped.getTime()));
         const hi = new Date(Math.max(start.getTime(), endClamped.getTime()));
         const measurement = await getCustomRangeTemperature(DEFAULT_HIVE_ID, lo, hi);
         return res.status(200).json({ measurement });
     }
-
+    
     const lo = new Date(Math.min(start.getTime(), end.getTime()));
     const hi = new Date(Math.max(start.getTime(), end.getTime()));
     const measurement = await getCustomRangeTemperature(DEFAULT_HIVE_ID, lo, hi);
@@ -530,10 +547,23 @@ app.get("/Humidity/twoweeks", async (req, res) => {
  * @returns json
  */
 app.get("/Humidity/range", async (req, res) => {
-    const start = new Date(req.query.start);
-    const end = new Date(req.query.end);
+        // replaces %3A with :
+        const startParam = req.query.start;
+        const endParam = req.query.end;
 
-    if (!isValidDateValue(start) || (await dateOutOfRange(start))) {
+        const startTime = startParam.replaceAll("%3A",":");
+        const endTime = endParam.replaceAll("%3A",":");
+
+        let start = new Date(startTime);
+        const end = new Date(endTime);
+
+        //tests to see if date is out of range and if it is put it to the hive start date
+        if (await dateOutOfRange(start)){
+            start = await getHiveStartDate(DEFAULT_HIVE_ID);
+        }
+
+
+    if (!isValidDateValue(start)) {
         return res.status(400).json({ error: "Invalid or out-of-range start date" });
     }
 
@@ -648,31 +678,58 @@ app.post("/uploadall/", async (req, res) => {
  * Production / Docker: serve Vite `dist/` from the same origin so `VITE_API_BASE` can be empty.
  * Local dev: skip unless `dist/index.html` exists and SERVE_STATIC is not "0".
  */
-const __appDir = path.dirname(fileURLToPath(import.meta.url));
-const distPath = path.resolve(__appDir, "../../../dist");
-const distIndex = path.join(distPath, "index.html");
-const shouldServeStatic =
-    fs.existsSync(distIndex) &&
-    (process.env.NODE_ENV === "production" || process.env.SERVE_STATIC === "1");
+// const __appDir = path.dirname(fileURLToPath(import.meta.url));
+// const distPath = path.resolve(__appDir, "../../../dist");
+// const distIndex = path.join(distPath, "index.html");
+// const shouldServeStatic =
+//     fs.existsSync(distIndex) &&
+//     (process.env.NODE_ENV === "production" || process.env.SERVE_STATIC === "1");
 
-if (shouldServeStatic) {
-    app.use(
-        express.static(distPath, {
-            fallthrough: true,
-            index: false,
-        })
-    );
-    app.get("*", (req, res, next) => {
-        if (req.method !== "GET" && req.method !== "HEAD") {
-            return next();
+// if (shouldServeStatic) {
+//     app.use(
+//         express.static(distPath, {
+//             fallthrough: true,
+//             index: false,
+//         })
+//     );
+//     app.get("*", (req, res, next) => {
+//         if (req.method !== "GET" && req.method !== "HEAD") {
+//             return next();
+//         }
+//         res.sendFile(distIndex, (err) => {
+//             if (err) next(err);
+//         });
+//     });
+// }
+
+//Serves the frontend
+const distDir = path.resolve(process.cwd(), "dist");
+const indexHtmlPath = path.join(distDir, "index.html");
+app.use(express.static(distDir));
+function sendIndexHtml(res) {
+    if (!fs.existsSync(indexHtmlPath)) {
+        return res
+            .status(404)
+            .type("text/plain")
+            .send(`Missing frontend build: ${indexHtmlPath}\nRun: npm run build`);
+    }
+    return res.sendFile(indexHtmlPath, (err) => {
+        if (err) {
+            // Ensure the request never hangs if sendFile errors.
+            if (!res.headersSent) {
+                res.status(500).type("text/plain").send(String(err));
+            } else {
+                res.end();
+            }
         }
-        res.sendFile(distIndex, (err) => {
-            if (err) next(err);
-        });
     });
 }
 
-const PORT = Number(process.env.PORT) || 3001;
+
+app.get("/", (req, res) => sendIndexHtml(res));
+app.get(/.*/, (req, res) => sendIndexHtml(res));
+
+const PORT = Number(process.env.PORT) || 3000;
 
 export { app };
 
@@ -703,9 +760,9 @@ if (shouldStartServer) {
             console.log(
                 `Backend listening on http://${host === "::" ? "localhost" : host}:${port}`
             );
-            if (shouldServeStatic) {
-                console.log("[static] Vite UI from dist/ (same origin as API)");
-            }
+            // if (shouldServeStatic) {
+            //     console.log("[static] Vite UI from dist/ (same origin as API)");
+            // }
         });
 
         // Run DB connectivity check in the background and log the result.
