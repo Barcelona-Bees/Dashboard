@@ -4,15 +4,11 @@
  * `computeAlerts` / `computeAlertsAt` use the latest reading only (current snapshot).
  * `collectAlertsFromPoints` walks historical merged samples for dashboard history.
  */
-import { THRESHOLDS_F } from "../config/thresholds";
+import { THRESHOLDS_F, findRangeForValue } from "../config/thresholds";
 import { transformToFrontendFormat } from "./dataTransform";
 
 /** Rolling window for the Alerts screen (days). */
 export const ALERT_HISTORY_DAYS = 30;
-
-function findRange(value, ranges) {
-  return ranges.find((r) => value >= r.from && value < r.to) ?? null;
-}
 
 function formatAlertTime(date) {
   return date.toLocaleString(undefined, {
@@ -38,7 +34,7 @@ export function computeAlertsAt(readings, atDate) {
   const timeStr = formatAlertTime(at);
   const alerts = [];
 
-  const internalR = findRange(readings.internalTemp, THRESHOLDS_F.internalTempF.ranges);
+  const internalR = findRangeForValue(readings.internalTemp, THRESHOLDS_F.internalTempF.ranges);
   if (internalR && internalR.color !== "green") {
     alerts.push({
       id: `HIVE_TEMP-${t}`,
@@ -51,7 +47,7 @@ export function computeAlertsAt(readings, atDate) {
   }
 
   if (readings.humidity != null && !Number.isNaN(readings.humidity)) {
-    const humidityR = findRange(readings.humidity, THRESHOLDS_F.humidityPct.ranges);
+    const humidityR = findRangeForValue(readings.humidity, THRESHOLDS_F.humidityPct.ranges);
     if (humidityR && humidityR.color !== "green") {
       alerts.push({
         id: `HUMIDITY-${t}`,

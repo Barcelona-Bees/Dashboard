@@ -13,6 +13,7 @@
  * - Uses CSS variables for theme (light/dark)
  */
 import { useMemo } from "react";
+import { findRangeForValue } from "../config/thresholds";
 
 const STATUS_COLORS = {
   green: "var(--success)",
@@ -55,7 +56,7 @@ export default function GaugeCard(props) {
 
   const v = clamp(value, min, max);
   const status = statusForValue(v, ranges);
-  const statusLabel = ranges.find((r) => v >= r.from && v <= r.to)?.label ?? "unknown";
+  const statusLabel = findRangeForValue(v, ranges)?.label ?? "unknown";
 
   const ariaLabel = useMemo(() => {
     const valText = typeof v === "number" ? v.toFixed(decimals) : String(v);

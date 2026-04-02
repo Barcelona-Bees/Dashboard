@@ -3,7 +3,7 @@ import GaugeCard from "../components/GaugeCard";
 import AccessibleLineChart from "../components/AccessibleLineChart";
 import AlertCard from "../components/AlertCard";
 import { HomeSkeleton } from "../components/Skeleton";
-import { THRESHOLDS_F } from "../config/thresholds";
+import { THRESHOLDS_F, findRangeForValue } from "../config/thresholds";
 import {
   getCurrentReadingAlt,
   getTwoWeeksData,
@@ -247,9 +247,9 @@ export default function HomeScreen() {
   if (error) {
     return (
       <div className="page">
-        <div className="center">
-          <div className="h1" style={{ color: 'var(--danger)' }}>Error</div>
-          <div className="smallMuted">{error}</div>
+        <div className="pageHead">
+          <h1 className="pageTitle" style={{ color: "var(--danger)" }}>Error</h1>
+          <p className="pageMeta">{error}</p>
         </div>
       </div>
     );
@@ -258,15 +258,15 @@ export default function HomeScreen() {
   if (empty) {
     return (
       <div className="page">
-        <div className="center">
-          <div className="h1">No sensor data yet</div>
-          <div className="smallMuted" style={{ maxWidth: 520, lineHeight: 1.5 }}>
+        <div className="pageHead">
+          <h1 className="pageTitle">No sensor data yet</h1>
+          <p className="pageMeta" style={{ maxWidth: "32rem", marginLeft: "auto", marginRight: "auto" }}>
             The backend is up, but there are no temperature rows in the database for the
             configured hive. Load schema if needed (
-            <code style={{ fontSize: 12 }}>src/backend/database/database_initial.sql</code>
+            <code className="inlineCode">src/backend/database/database_initial.sql</code>
             ), then insert readings from your pipeline or run{" "}
-            <code style={{ fontSize: 12 }}>npm run db:seed</code> for demo points.
-          </div>
+            <code className="inlineCode">npm run db:seed</code> for demo points.
+          </p>
         </div>
       </div>
     );
@@ -274,12 +274,17 @@ export default function HomeScreen() {
 
   if (!readings) return null;
 
+  const insideTempBand = findRangeForValue(
+    readings.internalTemp,
+    THRESHOLDS_F.internalTempF.ranges
+  );
+
   return (
     <div className="page">
-      <div className="center">
-        <div className="h1">Current Readings</div>
-        <div className="smallMuted">last updated: {updatedAt}</div>
-      </div>
+      <header className="pageHead">
+        <h1 className="pageTitle">Current readings</h1>
+        <p className="pageMeta">Last updated · {updatedAt}</p>
+      </header>
 
       <div className="heroRow">
         <div className="heroMetric">
@@ -296,10 +301,16 @@ export default function HomeScreen() {
           <div className="heroMetricValue">
             {readings.internalTemp.toFixed(2)}°F
           </div>
+          <div
+            className="heroMetricBand"
+            data-tier={insideTempBand?.color ?? "gray"}
+          >
+            {insideTempBand?.label ?? "—"}
+          </div>
         </div>
       </div>
 
-      <div className="grid2">
+      <div className="gaugeSingleWrap">
         {readings.humidity != null && !Number.isNaN(readings.humidity) ? (
           <GaugeCard
             value={readings.humidity}
@@ -323,8 +334,17 @@ export default function HomeScreen() {
         )}
       </div>
 
+      <aside
+        className="thresholdTip"
+        aria-label="How humidity and temperature bands are interpreted"
+      >
+        Humidity bands follow common in-hive targets (~50–60% RH is often cited; &gt;75% can
+        increase condensation risk). Temperature bands use typical brood-area readings (~93–95°F)
+        as a reference — sensor placement and season change what you see.
+      </aside>
+
       <section className="pageSection" aria-labelledby="hardware-heading">
-        <h2 id="hardware-heading" className="pageSectionTitle">Hardware info</h2>
+        <h2 id="hardware-heading" className="pageSectionTitle">Hardware</h2>
         <div className="hardwareInfoRow">
           <div className="hardwareInfoCard" aria-label="Connection status">
             <span className="hardwareInfoLabel">Connection</span>
@@ -372,9 +392,9 @@ export default function HomeScreen() {
 
       <section className="pageSection" aria-labelledby="alerts-heading">
         <h2 id="alerts-heading" className="pageSectionTitle">Today&apos;s alerts</h2>
-        <div className="smallMuted" style={{ marginBottom: 12 }}>
+        <p className="pageSectionLead">
           Readings from today (local time) that crossed humidity or temperature thresholds.
-        </div>
+        </p>
         <div className="stack">
           {todayAlerts.length === 0 ? (
             <div className="emptyState">

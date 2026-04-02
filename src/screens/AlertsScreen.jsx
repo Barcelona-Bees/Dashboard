@@ -107,9 +107,9 @@ export default function AlertsScreen() {
   if (error) {
     return (
       <div className="page">
-        <div className="center">
-          <div className="h1" style={{ color: "var(--danger)" }}>Error</div>
-          <div className="smallMuted">{error}</div>
+        <div className="pageHead">
+          <h1 className="pageTitle" style={{ color: "var(--danger)" }}>Error</h1>
+          <p className="pageMeta">{error}</p>
         </div>
       </div>
     );
@@ -118,11 +118,12 @@ export default function AlertsScreen() {
   if (empty) {
     return (
       <div className="page">
-        <div className="center">
-          <div className="h1" style={{ fontSize: 18 }}>No readings</div>
-          <div className="smallMuted">
-            Add temperature data to the database or run <code>npm run db:seed</code>.
-          </div>
+        <div className="pageHead">
+          <h1 className="pageTitle">No readings</h1>
+          <p className="pageMeta">
+            Add temperature data to the database or run{" "}
+            <code className="inlineCode">npm run db:seed</code>.
+          </p>
         </div>
       </div>
     );
@@ -137,16 +138,15 @@ export default function AlertsScreen() {
 
   return (
     <div className="page">
-      <div className="center">
-        <div className="h1" style={{ fontSize: 18 }}>Activity & alerts</div>
-        <div className="smallMuted">
-          Threshold crossings in the last {ALERT_HISTORY_DAYS} days · last refreshed:{" "}
-          {updatedAt}
-        </div>
-      </div>
+      <header className="pageHead">
+        <h1 className="pageTitle">Activity &amp; alerts</h1>
+        <p className="pageMeta">
+          Threshold crossings in the last {ALERT_HISTORY_DAYS} days · refreshed {updatedAt}
+        </p>
+      </header>
 
-      <div className="yellowPanel">
-        <div className="panelTitle">Alert history</div>
+      <div className="panelHistory">
+        <h2 className="panelHistoryTitle">Alert history</h2>
         <div className="stack">
           {historicalAlerts.length === 0 ? (
             <div className="emptyState">
@@ -167,16 +167,7 @@ export default function AlertsScreen() {
         </div>
 
         {historicalAlerts.length > PAGE_SIZE ? (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 16,
-              marginTop: 16,
-              flexWrap: "wrap",
-            }}
-          >
+          <nav className="paginationBar" aria-label="Alert history pages">
             <button
               type="button"
               className="exportBtn"
@@ -185,7 +176,7 @@ export default function AlertsScreen() {
             >
               Previous
             </button>
-            <span className="smallMuted">
+            <span className="paginationInfo">
               Page {safePage} of {totalPages}
             </span>
             <button
@@ -196,7 +187,7 @@ export default function AlertsScreen() {
             >
               Next
             </button>
-          </div>
+          </nav>
         ) : null}
       </div>
     </div>

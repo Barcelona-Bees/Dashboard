@@ -593,11 +593,22 @@ app.post("/upload/Humidity", async (req, res) => {
 
 
 app.post("/uploadall/", async (req, res) => {
-// console.log("THIS IS THE DAT #####################", req);
-    const data = req.body.uplink_message.decoded_payload;
+    // TTN / LoRaWAN webhook: { uplink_message: { decoded_payload: { ... } } }
+    // Demo script & direct clients: { temp, humidity, timestamp, passkey } at top level
+    const data =
+        req.body?.uplink_message?.decoded_payload ??
+        (req.body &&
+        typeof req.body.temp !== "undefined" &&
+        typeof req.body.humidity !== "undefined"
+            ? req.body
+            : null);
 
-// console.log("THIS IS THE DAT #####################", data);
-    
+    if (!data || typeof data !== "object") {
+        return res.status(400).json({
+            error:
+                "Invalid body: expected uplink_message.decoded_payload (TTN) or flat temp/humidity/timestamp/passkey",
+        });
+    }
 
     const { temp, humidity, timestamp, passkey } = data;
 

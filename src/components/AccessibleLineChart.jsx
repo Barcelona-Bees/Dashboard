@@ -34,8 +34,12 @@ export default function AccessibleLineChart(props) {
       { key: "humidity", name: "Relative humidity" },
       { key: "temperature", name: "Surrounding temperature" },
     ],
-    height = 180,
+    height = 200,
+    /** Optional per-series stroke colors (e.g. one color for temp-only charts). */
+    seriesColors: seriesColorsProp,
   } = props;
+
+  const seriesColors = seriesColorsProp ?? ["var(--primary)", "var(--accent)"];
 
   const pad = 24;
   const leftAxisWidth = 40;
@@ -59,8 +63,23 @@ export default function AccessibleLineChart(props) {
     return ys;
   }, [data, series]);
 
+  if (!data || data.length === 0 || allY.length === 0) {
+    return (
+      <div className="chartRoot" role="status" aria-live="polite">
+        <p className="emptyState">No data to display for this chart.</p>
+      </div>
+    );
+  }
+
   const yMin = Math.min(...allY);
   const yMax = Math.max(...allY);
+  if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) {
+    return (
+      <div className="chartRoot" role="status" aria-live="polite">
+        <p className="emptyState">Chart data is invalid or incomplete.</p>
+      </div>
+    );
+  }
   const ySpan = (yMax - yMin) || 1;
 
   const xs = useMemo(() => {
@@ -108,33 +127,15 @@ export default function AccessibleLineChart(props) {
     setActive(nearestIndex(xs, x));
   };
 
-  const seriesColors = ["#4f46e5", "#f59e0b"];
-
   return (
-    <div style={{ userSelect: "none" }}>
+    <div className="chartRoot">
       {/* Legend */}
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "16px",
-          marginBottom: 8,
-          fontSize: 12,
-          fontWeight: 600,
-        }}
-        role="list"
-        aria-label="Chart series"
-      >
+      <div className="chartLegend" role="list" aria-label="Chart series">
         {series.map((s, idx) => (
-          <div key={s.key} style={{ display: "flex", alignItems: "center", gap: 6 }} role="listitem">
+          <div key={s.key} className="chartLegendItem" role="listitem">
             <span
-              style={{
-                display: "inline-block",
-                width: 16,
-                height: 3,
-                backgroundColor: seriesColors[idx % seriesColors.length],
-                borderRadius: 1,
-              }}
+              className="chartLegendSwatch"
+              style={{ backgroundColor: seriesColors[idx % seriesColors.length] }}
               aria-hidden
             />
             <span>{s.name}</span>
@@ -170,7 +171,7 @@ export default function AccessibleLineChart(props) {
                 y1={y}
                 x2={plotRight}
                 y2={y}
-                stroke="rgba(0,0,0,0.08)"
+                stroke="var(--chart-grid-strong)"
                 strokeDasharray="2 2"
               />
               <text
@@ -179,7 +180,7 @@ export default function AccessibleLineChart(props) {
                 textAnchor="end"
                 dominantBaseline="middle"
                 fontSize="10"
-                fill="#555"
+                fill="var(--chart-axis-text)"
               >
                 {Number.isInteger(val) ? val : val.toFixed(1)}
               </text>
@@ -195,7 +196,7 @@ export default function AccessibleLineChart(props) {
             y1={plotTop}
             x2={plotLeft + (i * plotWidth) / 10}
             y2={plotBottom}
-            stroke="rgba(0,0,0,0.06)"
+            stroke="var(--chart-grid)"
           />
         ))}
 
@@ -216,7 +217,8 @@ export default function AccessibleLineChart(props) {
           y1={plotTop - 6}
           x2={activeX}
           y2={plotBottom + 6}
-          stroke="rgba(0,0,0,0.25)"
+          stroke="var(--chart-grid-strong)"
+          strokeOpacity={0.9}
         />
 
         {/* Active points */}
@@ -229,7 +231,7 @@ export default function AccessibleLineChart(props) {
               cy={y}
               r="4.5"
               fill={seriesColors[idx % seriesColors.length]}
-              stroke="#fff"
+              stroke="var(--surface-main)"
               strokeWidth="2"
             />
           );
@@ -237,7 +239,7 @@ export default function AccessibleLineChart(props) {
       </svg>
 
       {/* Always-visible readout */}
-      <div className="chartReadout">
+      <div className="chartReadout" aria-live="polite">
         <strong>{activeLabel}</strong> — {activeText}
       </div>
     </div>
