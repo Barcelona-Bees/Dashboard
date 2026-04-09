@@ -4,6 +4,7 @@
  */
 // Application layer – Express API over hive data (calls bl functions to send data to frontend)
 
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -25,7 +26,6 @@ import {
 import { isValidDateValue, toNumericReading } from "../busLayer/utils.js";
 // Startup DB check (see dbutils.verifyDatabaseConnection) — keeps PR behavior: no silent half-running server.
 import { verifyDatabaseConnection } from "../dataLinkLayer/dbutils.js";
-import { time } from "node:console";
 
 // Checks if the server should be started based on what starts it
 function shouldStartHttpServer() {
@@ -63,6 +63,12 @@ app.use(((req, res, next) =>{
 }));
 
 app.use(express.json());
+
+/** App Platform / load balancers: cheap liveness check (no DB hit). */
+app.get("/health", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).json({ ok: true });
+});
 
 const readingStreamClients = new Set();
 
@@ -306,10 +312,26 @@ app.get("/temp/twoweeks", async (req, res) => {
  * @returns json
  */
 app.get("/temp/range", async (req, res) => {
-    const start = new Date(req.query.start);
-    const end = new Date(req.query.end);
+    // replaces %3A with :
+    const startParam = req.query.start;
+    const endParam = req.query.end;
 
-    if (!isValidDateValue(start) || (await dateOutOfRange(start))) {
+    // console.log('startParam',startParam);
+    // console.log('endParam',endParam);
+
+    
+    const startTime = startParam.replaceAll("%3A",":");
+    const endTime = endParam.replaceAll("%3A",":");
+    
+    let start = new Date(startTime);
+    const end = new Date(endTime);
+
+    //tests to see if date is out of range and if it is put it to the hive start date
+    if (await dateOutOfRange(start)){
+        start = await getHiveStartDate(DEFAULT_HIVE_ID);
+    }
+
+    if (!isValidDateValue(start)) {
         return res.status(400).json({ error: "Invalid or out-of-range start date" });
     }
 
@@ -326,12 +348,13 @@ app.get("/temp/range", async (req, res) => {
         } else if (end.getTime() < hiveStart.getTime()) {
             endClamped = hiveStart;
         }
+
         const lo = new Date(Math.min(start.getTime(), endClamped.getTime()));
         const hi = new Date(Math.max(start.getTime(), endClamped.getTime()));
         const measurement = await getCustomRangeTemperature(DEFAULT_HIVE_ID, lo, hi);
         return res.status(200).json({ measurement });
     }
-
+    
     const lo = new Date(Math.min(start.getTime(), end.getTime()));
     const hi = new Date(Math.max(start.getTime(), end.getTime()));
     const measurement = await getCustomRangeTemperature(DEFAULT_HIVE_ID, lo, hi);
@@ -524,10 +547,23 @@ app.get("/Humidity/twoweeks", async (req, res) => {
  * @returns json
  */
 app.get("/Humidity/range", async (req, res) => {
-    const start = new Date(req.query.start);
-    const end = new Date(req.query.end);
+        // replaces %3A with :
+        const startParam = req.query.start;
+        const endParam = req.query.end;
 
-    if (!isValidDateValue(start) || (await dateOutOfRange(start))) {
+        const startTime = startParam.replaceAll("%3A",":");
+        const endTime = endParam.replaceAll("%3A",":");
+
+        let start = new Date(startTime);
+        const end = new Date(endTime);
+
+        //tests to see if date is out of range and if it is put it to the hive start date
+        if (await dateOutOfRange(start)){
+            start = await getHiveStartDate(DEFAULT_HIVE_ID);
+        }
+
+
+    if (!isValidDateValue(start)) {
         return res.status(400).json({ error: "Invalid or out-of-range start date" });
     }
 
@@ -587,11 +623,22 @@ app.post("/upload/Humidity", async (req, res) => {
 
 
 app.post("/uploadall/", async (req, res) => {
-// console.log("THIS IS THE DAT #####################", req);
-    const data = req.body.uplink_message.decoded_payload;
+    // TTN / LoRaWAN webhook: { uplink_message: { decoded_payload: { ... } } }
+    // Demo script & direct clients: { temp, humidity, timestamp, passkey } at top level
+    const data =
+        req.body?.uplink_message?.decoded_payload ??
+        (req.body &&
+        typeof req.body.temp !== "undefined" &&
+        typeof req.body.humidity !== "undefined"
+            ? req.body
+            : null);
 
-// console.log("THIS IS THE DAT #####################", data);
-    
+    if (!data || typeof data !== "object") {
+        return res.status(400).json({
+            error:
+                "Invalid body: expected uplink_message.decoded_payload (TTN) or flat temp/humidity/timestamp/passkey",
+        });
+    }
 
     const { temp, humidity, timestamp, passkey } = data;
 
@@ -627,6 +674,34 @@ app.post("/uploadall/", async (req, res) => {
     return res.status(200).json({ success: true });
 });
 
+/**
+ * Production / Docker: serve Vite `dist/` from the same origin so `VITE_API_BASE` can be empty.
+ * Local dev: skip unless `dist/index.html` exists and SERVE_STATIC is not "0".
+ */
+// const __appDir = path.dirname(fileURLToPath(import.meta.url));
+// const distPath = path.resolve(__appDir, "../../../dist");
+// const distIndex = path.join(distPath, "index.html");
+// const shouldServeStatic =
+//     fs.existsSync(distIndex) &&
+//     (process.env.NODE_ENV === "production" || process.env.SERVE_STATIC === "1");
+
+// if (shouldServeStatic) {
+//     app.use(
+//         express.static(distPath, {
+//             fallthrough: true,
+//             index: false,
+//         })
+//     );
+//     app.get("*", (req, res, next) => {
+//         if (req.method !== "GET" && req.method !== "HEAD") {
+//             return next();
+//         }
+//         res.sendFile(distIndex, (err) => {
+//             if (err) next(err);
+//         });
+//     });
+// }
+
 //Serves the frontend
 const distDir = path.resolve(process.cwd(), "dist");
 const indexHtmlPath = path.join(distDir, "index.html");
@@ -649,6 +724,8 @@ function sendIndexHtml(res) {
         }
     });
 }
+
+
 app.get("/", (req, res) => sendIndexHtml(res));
 app.get(/.*/, (req, res) => sendIndexHtml(res));
 
@@ -683,6 +760,9 @@ if (shouldStartServer) {
             console.log(
                 `Backend listening on http://${host === "::" ? "localhost" : host}:${port}`
             );
+            // if (shouldServeStatic) {
+            //     console.log("[static] Vite UI from dist/ (same origin as API)");
+            // }
         });
 
         // Run DB connectivity check in the background and log the result.

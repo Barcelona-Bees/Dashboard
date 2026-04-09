@@ -1,24 +1,15 @@
 /**
- * alerts.js – Rule-based alerts from current readings and thresholds
+ * alerts.js – Rule-based alerts from readings and thresholds
  *
- * Compares readings against THRESHOLDS_F ranges. When a value falls in
- * yellow or red (not green), we generate an alert. This drives:
- * - HomeScreen "Alerts" section
- * - AlertsScreen "Activity & alerts" list
- *
- * PR note: humidity / CO₂ rules are skipped when those values are null (no sensor data yet),
- * so we do not fabricate alerts from placeholder numbers.
+ * `computeAlerts` / `computeAlertsAt` use the latest reading only (current snapshot).
+ * `collectAlertsFromPoints` walks historical merged samples for dashboard history.
  */
-import { THRESHOLDS_F } from "../config/thresholds";
+import { THRESHOLDS_F, findRangeForValue } from "../config/thresholds";
+import { transformToFrontendFormat } from "./dataTransform";
 
-function findRange(value, ranges) {
-  return ranges.find((r) => value >= r.from && value < r.to) ?? null;
-}
+/** Rolling window for the Alerts screen (days). */
+export const ALERT_HISTORY_DAYS = 30;
 
-/**
- * @param {Object} readings - { internalTemp, externalTemp, humidity, co2, batteryPct }
- * @returns {Array<{ id: string, type: string, text: string, severity: "warning"|"critical", metric: string }>}
- */
 function formatAlertTime(date) {
   return date.toLocaleString(undefined, {
     month: "short",
@@ -30,80 +21,100 @@ function formatAlertTime(date) {
 }
 
 /**
- * @param {Object} readings - { internalTemp, externalTemp, humidity, co2, batteryPct }
- * @returns {Array<{ id: string, type: string, text: string, severity: "warning"|"critical", metric: string, time: string }>}
+ * Alerts for a single reading at a specific time (historical or “now”).
+ * @param {Object} readings - { internalTemp, externalTemp, humidity }
+ * @param {Date|string|number} atDate - when this sample occurred
+ * @returns {Array<{ id: string, type: string, text: string, severity: string, metric: string, time: string }>}
  */
-export function computeAlerts(readings) {
+export function computeAlertsAt(readings, atDate) {
   if (!readings) return [];
 
+  const at = atDate instanceof Date ? atDate : new Date(atDate);
+  const t = at.getTime();
+  const timeStr = formatAlertTime(at);
   const alerts = [];
-  const now = new Date();
 
-  // Internal temp (hive temp – most critical for colony health)
-  const internalR = findRange(readings.internalTemp, THRESHOLDS_F.internalTempF.ranges);
+  const internalR = findRangeForValue(readings.internalTemp, THRESHOLDS_F.internalTempF.ranges);
   if (internalR && internalR.color !== "green") {
     alerts.push({
-      id: `temp-internal-${now.getTime()}`,
+      id: `HIVE_TEMP-${t}`,
       type: "HIVE_TEMP",
       text: `Inside hive temperature is ${internalR.label} (${readings.internalTemp.toFixed(1)}°F).`,
       severity: internalR.color === "red" ? "critical" : "warning",
       metric: "internalTemp",
-      time: formatAlertTime(now),
+      time: timeStr,
     });
   }
 
-  // Humidity (skip when sensor/backend did not provide a value)
   if (readings.humidity != null && !Number.isNaN(readings.humidity)) {
-    const humidityR = findRange(readings.humidity, THRESHOLDS_F.humidityPct.ranges);
+    const humidityR = findRangeForValue(readings.humidity, THRESHOLDS_F.humidityPct.ranges);
     if (humidityR && humidityR.color !== "green") {
       alerts.push({
-        id: `humidity-${now.getTime()}`,
+        id: `HUMIDITY-${t}`,
         type: "HUMIDITY",
         text: `Humidity is ${humidityR.label} (${readings.humidity}%).`,
         severity: humidityR.color === "red" ? "critical" : "warning",
         metric: "humidity",
-        time: formatAlertTime(now),
-      });
-    }
-  }
-
-  // CO2 — only when hardware reports it
-  if (readings.co2 != null && !Number.isNaN(readings.co2)) {
-    const co2R = findRange(readings.co2, THRESHOLDS_F.co2Pct.ranges);
-    if (co2R && co2R.color !== "green") {
-      alerts.push({
-        id: `co2-${now.getTime()}`,
-        type: "CO2",
-        text: `CO₂ level is ${co2R.label} (${readings.co2.toFixed(2)}%).`,
-        severity: co2R.color === "red" ? "critical" : "warning",
-        metric: "co2",
-        time: formatAlertTime(now),
-      });
-    }
-  }
-
-  // Battery (low / critical – not in thresholds, custom logic)
-  if (readings.batteryPct != null) {
-    if (readings.batteryPct <= 10) {
-      alerts.push({
-        id: `battery-${now.getTime()}`,
-        type: "BATTERY",
-        text: `Sensor battery critically low (${readings.batteryPct}%). Replace or charge soon.`,
-        severity: "critical",
-        metric: "battery",
-        time: formatAlertTime(now),
-      });
-    } else if (readings.batteryPct <= 25) {
-      alerts.push({
-        id: `battery-${now.getTime()}`,
-        type: "BATTERY",
-        text: `Sensor battery low (${readings.batteryPct}%). Consider charging or replacing.`,
-        severity: "warning",
-        metric: "battery",
-        time: formatAlertTime(now),
+        time: timeStr,
       });
     }
   }
 
   return alerts;
+}
+
+/**
+ * Current snapshot only (single “now” timestamp).
+ * @param {Object} readings
+ */
+export function computeAlerts(readings) {
+  return computeAlertsAt(readings, new Date());
+}
+
+/**
+ * Merged points: `{ timestamp, temperatureF, humidity }[]` (same shape as API merge).
+ * @param {Array<{ timestamp: string, temperatureF: number, humidity: number|null }>} points
+ * @returns {Array<object>} Newest first; includes `readingAt` (ISO timestamp string).
+ */
+export function collectAlertsFromPoints(points) {
+  if (!points || points.length === 0) return [];
+
+  const out = [];
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const readings = transformToFrontendFormat(p);
+    const at = new Date(p.timestamp);
+    const rowAlerts = computeAlertsAt(readings, at);
+    for (const a of rowAlerts) {
+      out.push({
+        ...a,
+        id: `${a.id}-r${i}`,
+        readingAt: typeof p.timestamp === "string" ? p.timestamp : String(p.timestamp),
+      });
+    }
+  }
+
+  out.sort((a, b) => {
+    const ta = new Date(a.readingAt).getTime();
+    const tb = new Date(b.readingAt).getTime();
+    return tb - ta;
+  });
+  return out;
+}
+
+/**
+ * Local calendar day filter (browser timezone).
+ * @param {Array<{ timestamp: string }>} points
+ * @param {Date} [dayRef] defaults to today
+ */
+export function filterPointsInLocalCalendarDay(points, dayRef = new Date()) {
+  const start = new Date(dayRef);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(dayRef);
+  end.setHours(23, 59, 59, 999);
+
+  return points.filter((p) => {
+    const d = new Date(p.timestamp);
+    return !Number.isNaN(d.getTime()) && d >= start && d <= end;
+  });
 }

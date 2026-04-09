@@ -5,9 +5,13 @@
  * Temperature values are treated as °F at the dashboard layer (matches DB `reading` for this project).
  */
 
-const API_BASE =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE) ||
-  "http://localhost:3001";
+/** Empty string = same origin (Docker / single Express host). Undefined = dev default. */
+const API_BASE = (() => {
+  if (typeof import.meta === "undefined") return "http://localhost:3001";
+  const v = import.meta.env?.VITE_API_BASE;
+  if (v !== undefined) return String(v);
+  return "http://localhost:3001";
+})();
 
 /**
  * Normalized row for charts/KPIs. `temperatureF` matches DB column `reading`
@@ -100,6 +104,21 @@ async function fetchTempAndHumidityRows(tempPath, humidityPath) {
   let merged = mergeHumidityOntoTempRows(tempRows, humRows);
   merged = await enrichLatestHumidity(merged);
   return merged;
+}
+
+/**
+ * Temp + humidity merged rows for `[start, end]` without `/measurement/latest` enrichment
+ * (correct for historical alert replay).
+ * @param {Date} start
+ * @param {Date} end
+ */
+export async function getMergedRange(start, end) {
+  const qs = `?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
+  const [tempJson, humJson] = await Promise.all([
+    fetchMeasurementJson(`/temp/range${qs}`),
+    fetchMeasurementJson(`/Humidity/range${qs}`).catch(() => ({ measurement: [] })),
+  ]);
+  return mergeHumidityOntoTempRows(measurementRows(tempJson), measurementRows(humJson));
 }
 
 /**

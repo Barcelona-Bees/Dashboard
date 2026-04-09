@@ -1,15 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import GaugeCard from "../components/GaugeCard";
 import AccessibleLineChart from "../components/AccessibleLineChart";
 import AlertCard from "../components/AlertCard";
 import { HomeSkeleton } from "../components/Skeleton";
-import { THRESHOLDS_F } from "../config/thresholds";
+import { THRESHOLDS_F, findRangeForValue } from "../config/thresholds";
 import {
   getCurrentReadingAlt,
   getTwoWeeksData,
   subscribeReadingUpdates,
 } from "../services/api";
-import { computeAlerts } from "../services/alerts";
+import {
+  collectAlertsFromPoints,
+  filterPointsInLocalCalendarDay,
+} from "../services/alerts";
 import { transformToFrontendFormat, transformTo24HourChart } from "../services/dataTransform";
 import { formatTimestamp, celsiusToFahrenheit } from "../utils/conversions";
 import {
@@ -17,36 +20,47 @@ import {
   buildExternalTempFMapForDate,
   getSyntheticExternalTempF,
 } from "../services/weather";
+import { loadHomeSnapshot, saveHomeSnapshot } from "../services/homeCache";
 
 /**
- * Fallback poll when SSE is unavailable. Default 30s to avoid overloading the API/VM;
- * SSE pushes still refresh immediately (debounced). Override with `VITE_HOME_POLL_MS` (min 3000).
+ * Fallback poll when SSE is unavailable. Default ~10 min — keeps VM/API load minimal.
+ * SSE still pushes fresh readings (debounced). Override with `VITE_HOME_POLL_MS` (min 3000).
  */
 const HOME_POLL_MS = (() => {
   const raw =
     typeof import.meta !== "undefined" ? import.meta.env?.VITE_HOME_POLL_MS : undefined;
   const n = raw != null && String(raw).trim() !== "" ? Number(raw) : NaN;
-  return Number.isFinite(n) && n >= 3000 ? n : 30_000;
+  return Number.isFinite(n) && n >= 3000 ? n : 600_000;
 })();
+
+const initialSnap = typeof window !== "undefined" ? loadHomeSnapshot() : null;
 
 /** Coalesce burst SSE `reading` events into one refresh. */
 const SSE_DEBOUNCE_MS = 350;
 
 export default function HomeScreen() {
-  const [readings, setReadings] = useState(null);
-  const [chartData, setChartData] = useState([]);
-  const [chartDateStr, setChartDateStr] = useState(null); // YYYY-MM-DD for weather alignment
-  const [externalTempByHour, setExternalTempByHour] = useState(null); // { "0:00": 45, ... } in °F, or null if using synthetic
-  const [currentOutsideTempF, setCurrentOutsideTempF] = useState(null); // single value for hero when we have weather
-  const [updatedAt, setUpdatedAt] = useState('');
-  const [loading, setLoading] = useState(true);
+  const contentShownRef = useRef(!!initialSnap);
+
+  const [readings, setReadings] = useState(initialSnap?.readings ?? null);
+  const [chartData, setChartData] = useState(initialSnap?.chartData ?? []);
+  const [chartDateStr, setChartDateStr] = useState(initialSnap?.chartDateStr ?? null); // YYYY-MM-DD for weather alignment
+  const [externalTempByHour, setExternalTempByHour] = useState(
+    initialSnap?.externalTempByHour ?? null
+  ); // { "0:00": 45, ... } in °F, or null if using synthetic
+  const [currentOutsideTempF, setCurrentOutsideTempF] = useState(
+    initialSnap?.currentOutsideTempF ?? null
+  ); // single value for hero when we have weather
+  const [updatedAt, setUpdatedAt] = useState(initialSnap?.updatedAt ?? "");
+  const [loading, setLoading] = useState(!initialSnap);
   const [error, setError] = useState(null);
-  const [empty, setEmpty] = useState(false);
+  const [empty, setEmpty] = useState(initialSnap?.empty ?? false);
+  const [todayAlerts, setTodayAlerts] = useState(initialSnap?.todayAlerts ?? []);
 
   useEffect(() => {
     let cancelled = false;
     let fetchInFlight = false;
     let sseDebounceTimer = null;
+    let lastOkFetchAt = initialSnap?.savedAt ?? 0;
 
     /** @param {boolean} silent When true, skip full-page loading skeleton (background poll / tab focus). */
     async function fetchData(silent = false) {
@@ -78,6 +92,19 @@ export default function HomeScreen() {
           setCurrentOutsideTempF(null);
           setUpdatedAt("");
           setEmpty(true);
+          saveHomeSnapshot({
+            readings: null,
+            chartData: [],
+            chartDateStr: null,
+            externalTempByHour: null,
+            currentOutsideTempF: null,
+            updatedAt: "",
+            empty: true,
+            todayAlerts: [],
+          });
+          setTodayAlerts([]);
+          contentShownRef.current = true;
+          lastOkFetchAt = Date.now();
           return;
         }
 
@@ -88,12 +115,18 @@ export default function HomeScreen() {
         const chart24h = transformTo24HourChart(last24h);
         setChartData(chart24h);
 
+        const todayPoints = filterPointsInLocalCalendarDay(twoWeeks, new Date());
+        const todayAlertsList = collectAlertsFromPoints(todayPoints);
+        setTodayAlerts(todayAlertsList);
+
         const dateStr =
           last24h.length > 0
             ? new Date(last24h[last24h.length - 1].timestamp).toISOString().split("T")[0]
             : null;
         setChartDateStr(dateStr);
 
+        let extHour = null;
+        let outsideF = null;
         try {
           const weatherMap = await getHourlyOutsideTempsByDate();
           if (cancelled) return;
@@ -107,7 +140,8 @@ export default function HomeScreen() {
           const hasTodayWeather = Object.keys(forToday).length > 0;
 
           // Chart outside line: use today's Rochester hourly temps (keys match "0:00".."23:00").
-          setExternalTempByHour(hasTodayWeather ? forToday : null);
+          extHour = hasTodayWeather ? forToday : null;
+          setExternalTempByHour(extHour);
 
           if (hasTodayWeather) {
             const forCurrentHour = forToday[hourLabel];
@@ -118,7 +152,8 @@ export default function HomeScreen() {
               const maxH = hours.length ? Math.max(...hours) : 23;
               return forToday[`${maxH}:00`];
             })();
-            setCurrentOutsideTempF(forCurrentHour != null ? forCurrentHour : fallbackHour);
+            outsideF = forCurrentHour != null ? forCurrentHour : fallbackHour;
+            setCurrentOutsideTempF(outsideF);
           } else {
             setCurrentOutsideTempF(null);
           }
@@ -130,21 +165,36 @@ export default function HomeScreen() {
           }
         }
 
-        setUpdatedAt(
-          current.timestamp ? formatTimestamp(current.timestamp) : ""
-        );
+        const updated =
+          current.timestamp ? formatTimestamp(current.timestamp) : "";
+        setUpdatedAt(updated);
+
+        saveHomeSnapshot({
+          readings: frontendReadings,
+          chartData: chart24h,
+          chartDateStr: dateStr,
+          externalTempByHour: extHour,
+          currentOutsideTempF: outsideF,
+          updatedAt: updated,
+          empty: false,
+          todayAlerts: todayAlertsList,
+        });
+        contentShownRef.current = true;
+        lastOkFetchAt = Date.now();
       } catch (err) {
         if (cancelled) return;
         console.error("Error fetching data:", err);
-        const msg =
-          err instanceof Error && err.message
-            ? err.message
-            : "Failed to load data.";
-        setError(
-          msg.includes("fetch") || msg.includes("Network")
-            ? "Cannot reach the API. Start the backend (npm run dev:backend) and check VITE_API_BASE in .env."
-            : msg
-        );
+        if (!contentShownRef.current) {
+          const msg =
+            err instanceof Error && err.message
+              ? err.message
+              : "Failed to load data.";
+          setError(
+            msg.includes("fetch") || msg.includes("Network")
+              ? "Cannot reach the API. Start the backend (npm run dev:backend) and check VITE_API_BASE in .env."
+              : msg
+          );
+        }
       } finally {
         fetchInFlight = false;
         if (!silent && !cancelled) {
@@ -162,17 +212,20 @@ export default function HomeScreen() {
         fetchData(true);
       }, SSE_DEBOUNCE_MS);
     }
-
-    fetchData(false);
+    if (initialSnap) {
+      fetchData(true);
+    } else {
+      fetchData(false);
+    }
 
     const unsubscribe = subscribeReadingUpdates(scheduleSseRefresh);
 
     const interval = setInterval(() => fetchData(true), HOME_POLL_MS);
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        fetchData(true);
-      }
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastOkFetchAt < HOME_POLL_MS) return;
+      fetchData(true);
     };
     document.addEventListener("visibilitychange", onVisible);
 
@@ -194,9 +247,9 @@ export default function HomeScreen() {
   if (error) {
     return (
       <div className="page">
-        <div className="center">
-          <div className="h1" style={{ color: 'var(--danger)' }}>Error</div>
-          <div className="smallMuted">{error}</div>
+        <div className="pageHead">
+          <h1 className="pageTitle" style={{ color: "var(--danger)" }}>Error</h1>
+          <p className="pageMeta">{error}</p>
         </div>
       </div>
     );
@@ -205,15 +258,15 @@ export default function HomeScreen() {
   if (empty) {
     return (
       <div className="page">
-        <div className="center">
-          <div className="h1">No sensor data yet</div>
-          <div className="smallMuted" style={{ maxWidth: 520, lineHeight: 1.5 }}>
+        <div className="pageHead">
+          <h1 className="pageTitle">No sensor data yet</h1>
+          <p className="pageMeta" style={{ maxWidth: "32rem", marginLeft: "auto", marginRight: "auto" }}>
             The backend is up, but there are no temperature rows in the database for the
             configured hive. Load schema if needed (
-            <code style={{ fontSize: 12 }}>src/backend/database/database_initial.sql</code>
+            <code className="inlineCode">src/backend/database/database_initial.sql</code>
             ), then insert readings from your pipeline or run{" "}
-            <code style={{ fontSize: 12 }}>npm run db:seed</code> for demo points.
-          </div>
+            <code className="inlineCode">npm run db:seed</code> for demo points.
+          </p>
         </div>
       </div>
     );
@@ -221,12 +274,17 @@ export default function HomeScreen() {
 
   if (!readings) return null;
 
+  const insideTempBand = findRangeForValue(
+    readings.internalTemp,
+    THRESHOLDS_F.internalTempF.ranges
+  );
+
   return (
     <div className="page">
-      <div className="center">
-        <div className="h1">Current Readings</div>
-        <div className="smallMuted">last updated: {updatedAt}</div>
-      </div>
+      <header className="pageHead">
+        <h1 className="pageTitle">Current readings</h1>
+        <p className="pageMeta">Last updated · {updatedAt}</p>
+      </header>
 
       <div className="heroRow">
         <div className="heroMetric">
@@ -243,10 +301,16 @@ export default function HomeScreen() {
           <div className="heroMetricValue">
             {readings.internalTemp.toFixed(2)}°F
           </div>
+          <div
+            className="heroMetricBand"
+            data-tier={insideTempBand?.color ?? "gray"}
+          >
+            {insideTempBand?.label ?? "—"}
+          </div>
         </div>
       </div>
 
-      <div className="grid2">
+      <div className="gaugeSingleWrap">
         {readings.humidity != null && !Number.isNaN(readings.humidity) ? (
           <GaugeCard
             value={readings.humidity}
@@ -268,32 +332,19 @@ export default function HomeScreen() {
             </div>
           </div>
         )}
-
-        {readings.co2 != null && !Number.isNaN(readings.co2) ? (
-          <GaugeCard
-            value={readings.co2}
-            label="CO2"
-            unit="%"
-            min={THRESHOLDS_F.co2Pct.min}
-            max={THRESHOLDS_F.co2Pct.max}
-            ranges={THRESHOLDS_F.co2Pct.ranges}
-            decimals={2}
-          />
-        ) : (
-          <div className="gaugeCard" role="status">
-            <div className="gaugeCardValue" style={{ color: "var(--text-muted)" }}>
-              —
-            </div>
-            <div className="gaugeCardLabel">CO2</div>
-            <div className="gaugeCardStatus" data-status="gray">
-              Not reported by current sensor
-            </div>
-          </div>
-        )}
       </div>
 
+      <aside
+        className="thresholdTip"
+        aria-label="How humidity and temperature bands are interpreted"
+      >
+        Humidity bands follow common in-hive targets (~50–60% RH is often cited; &gt;75% can
+        increase condensation risk). Temperature bands use typical brood-area readings (~93–95°F)
+        as a reference — sensor placement and season change what you see.
+      </aside>
+
       <section className="pageSection" aria-labelledby="hardware-heading">
-        <h2 id="hardware-heading" className="pageSectionTitle">Hardware info</h2>
+        <h2 id="hardware-heading" className="pageSectionTitle">Hardware</h2>
         <div className="hardwareInfoRow">
           <div className="hardwareInfoCard" aria-label="Connection status">
             <span className="hardwareInfoLabel">Connection</span>
@@ -303,12 +354,6 @@ export default function HomeScreen() {
             <span className="hardwareInfoLabel">Package loss</span>
             <span className="hardwareInfoValue">
               {readings.packageLoss != null ? readings.packageLoss : "—"}
-            </span>
-          </div>
-          <div className="hardwareInfoCard" aria-label="Battery level">
-            <span className="hardwareInfoLabel">Battery</span>
-            <span className="hardwareInfoValue">
-              {readings.batteryPct != null ? `${readings.batteryPct}%` : "—"}
             </span>
           </div>
         </div>
@@ -346,14 +391,17 @@ export default function HomeScreen() {
       </section>
 
       <section className="pageSection" aria-labelledby="alerts-heading">
-        <h2 id="alerts-heading" className="pageSectionTitle">Alerts</h2>
+        <h2 id="alerts-heading" className="pageSectionTitle">Today&apos;s alerts</h2>
+        <p className="pageSectionLead">
+          Readings from today (local time) that crossed humidity or temperature thresholds.
+        </p>
         <div className="stack">
-          {computeAlerts(readings).length === 0 ? (
+          {todayAlerts.length === 0 ? (
             <div className="emptyState">
-              No active alerts — hive looks healthy
+              No threshold alerts yet today — hive looks healthy
             </div>
           ) : (
-            computeAlerts(readings).map((a) => (
+            todayAlerts.map((a) => (
               <AlertCard
                 key={a.id}
                 type={a.type}

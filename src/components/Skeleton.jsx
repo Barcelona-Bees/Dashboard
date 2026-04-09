@@ -12,38 +12,36 @@ export default function Skeleton({ className = "", style = {} }) {
 export function HomeSkeleton() {
   return (
     <div className="page">
-      <div className="center">
-        <Skeleton className="skeletonTitle" style={{ width: 160, height: 28, margin: "0 auto" }} />
-        <Skeleton className="skeletonSub" style={{ width: 120, height: 14, margin: "8px auto 0" }} />
+      <div className="pageHead">
+        <Skeleton style={{ width: 200, height: 26, margin: "0 auto", borderRadius: "var(--radius-sm)" }} />
+        <Skeleton style={{ width: 160, height: 14, margin: "10px auto 0", borderRadius: "var(--radius-sm)" }} />
       </div>
 
       <div className="heroRow">
-        <Skeleton className="heroMetric" style={{ flex: 1, minHeight: 80 }} />
-        <Skeleton className="heroMetric" style={{ flex: 1, minHeight: 80 }} />
+        <Skeleton className="heroMetric" style={{ minHeight: 88 }} />
+        <Skeleton className="heroMetric" style={{ minHeight: 88 }} />
       </div>
 
-      <div className="grid2">
-        <Skeleton style={{ minHeight: 140, borderRadius: "var(--radius-lg)" }} />
-        <Skeleton style={{ minHeight: 140, borderRadius: "var(--radius-lg)" }} />
+      <div className="gaugeSingleWrap">
+        <Skeleton style={{ minHeight: 160, borderRadius: "var(--radius-lg)" }} />
       </div>
 
       <section className="pageSection">
-        <Skeleton className="skeletonSectionTitle" style={{ width: 120, height: 14 }} />
+        <Skeleton style={{ width: 100, height: 12, margin: "0 auto 12px", borderRadius: "var(--radius-sm)" }} />
         <div className="hardwareInfoRow">
-          <Skeleton style={{ flex: 1, minHeight: 56, minWidth: 100 }} />
-          <Skeleton style={{ flex: 1, minHeight: 56, minWidth: 100 }} />
-          <Skeleton style={{ flex: 1, minHeight: 56, minWidth: 100 }} />
+          <Skeleton style={{ minHeight: 64 }} />
+          <Skeleton style={{ minHeight: 64 }} />
         </div>
       </section>
 
       <section className="pageSection">
-        <Skeleton className="skeletonSectionTitle" style={{ width: 180, height: 14 }} />
-        <Skeleton style={{ width: "100%", minHeight: 220, borderRadius: "var(--radius-lg)" }} />
+        <Skeleton style={{ width: 200, height: 12, margin: "0 auto 12px", borderRadius: "var(--radius-sm)" }} />
+        <Skeleton style={{ width: "100%", minHeight: 240, borderRadius: "var(--radius-lg)" }} />
       </section>
 
       <section className="pageSection">
-        <Skeleton className="skeletonSectionTitle" style={{ width: 60, height: 14 }} />
-        <Skeleton style={{ width: "100%", height: 60, borderRadius: "var(--radius-md)" }} />
+        <Skeleton style={{ width: 120, height: 12, margin: "0 auto 12px", borderRadius: "var(--radius-sm)" }} />
+        <Skeleton style={{ width: "100%", height: 72, borderRadius: "var(--radius-md)" }} />
       </section>
     </div>
   );
@@ -52,13 +50,13 @@ export function HomeSkeleton() {
 export function AlertsSkeleton() {
   return (
     <div className="page">
-      <div className="center">
-        <Skeleton style={{ width: 160, height: 24, margin: "0 auto" }} />
-        <Skeleton style={{ width: 100, height: 14, margin: "8px auto 0" }} />
+      <div className="pageHead">
+        <Skeleton style={{ width: 200, height: 26, margin: "0 auto", borderRadius: "var(--radius-sm)" }} />
+        <Skeleton style={{ width: 280, height: 14, margin: "10px auto 0", borderRadius: "var(--radius-sm)" }} />
       </div>
-      <div className="yellowPanel" style={{ marginTop: 16 }}>
-        <Skeleton style={{ width: 60, height: 16, margin: "0 auto 12px" }} />
-        <Skeleton style={{ width: "100%", height: 80, borderRadius: "var(--radius-md)" }} />
+      <div className="panelHistory">
+        <Skeleton style={{ width: 140, height: 18, margin: "0 auto 16px", borderRadius: "var(--radius-sm)" }} />
+        <Skeleton style={{ width: "100%", height: 96, borderRadius: "var(--radius-md)" }} />
       </div>
     </div>
   );
@@ -68,17 +66,16 @@ export function DataSkeleton() {
   return (
     <div className="page">
       <div className="dataTopRow">
-        <div className="center" style={{ flex: 1 }}>
-          <Skeleton style={{ width: 140, height: 24, margin: "0 auto" }} />
-          <Skeleton style={{ width: 100, height: 14, margin: "8px auto 0" }} />
+        <div className="pageHead">
+          <Skeleton style={{ width: 160, height: 26, margin: "0 auto", borderRadius: "var(--radius-sm)" }} />
+          <Skeleton style={{ width: 120, height: 14, margin: "10px auto 0", borderRadius: "var(--radius-sm)" }} />
         </div>
-        <Skeleton style={{ width: 80, height: 40, borderRadius: "var(--radius-md)" }} />
+        <Skeleton style={{ width: 88, height: 44, borderRadius: "var(--radius-md)" }} />
       </div>
 
       <div className="dataGrid">
-        {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} style={{ minHeight: 220, borderRadius: "var(--radius-lg)" }} />
-        ))}
+        <Skeleton style={{ minHeight: 240, borderRadius: "var(--radius-lg)" }} />
+        <Skeleton style={{ minHeight: 240, borderRadius: "var(--radius-lg)" }} />
       </div>
     </div>
   );

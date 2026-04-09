@@ -1,6 +1,6 @@
 /**
  * Maps API points to dashboard “readings” object (temperature already in °F from DB).
- * CO₂ / packet loss / battery stay null—no fake KPI numbers—so gauges show “—” until the API adds fields.
+ * Packet loss stays null until the API adds fields.
  */
 export function transformToFrontendFormat(apiData, connectionStatus = 'Connected') {
   const tempF = apiData.temperatureF;
@@ -8,11 +8,9 @@ export function transformToFrontendFormat(apiData, connectionStatus = 'Connected
   return {
     externalTemp: tempF,
     internalTemp: tempF,
-    co2: null,
     humidity: apiData.humidity ?? null,
     connectionStatus,
     packageLoss: null,
-    batteryPct: null,
   };
 }
 
