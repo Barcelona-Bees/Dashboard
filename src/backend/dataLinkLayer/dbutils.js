@@ -106,8 +106,6 @@ async function getData( table, columns = `*`, criteria = null) {
           queryResult = await pool.query( qryString );
         }
 
-        // console.log("query results", queryResult);
-
         //Returns JSON
         return queryResult;
       }
@@ -264,7 +262,6 @@ async function getDataMulti( table, columns = `*`, criteria ) {
       
       const qryCriteria = ( critList.length ) ? `WHERE ${ critList.join( ` AND ` ) }` : ``,
             qryString = `SELECT ${ qryColumns } FROM ${ table } ${ qryCriteria }`;
-      // console.log( qryString );
 
       const queryResult = await pool.query( qryString );
 
@@ -332,12 +329,9 @@ async function rollbackTransaction(){
 }
 
 export {
-    // connectClient,
-    // disconnectClient,
     getData,
     insertData,
     updateData,
-    // runDirectSQL,
     runDirectSQLwithPrepared,
     startTransaction,
     rollbackTransaction,

@@ -150,8 +150,6 @@ async function hashPassword(password) {
     return hash;
 }
 
-// console.log(await hashPassword("Hello"));
-
 /**
  * Generates a new user token
  *

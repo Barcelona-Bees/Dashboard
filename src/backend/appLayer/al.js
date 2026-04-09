@@ -1,7 +1,3 @@
-/**
- * Application layer — Express API over hive data (datalink → Postgres → JSON for the React app).
- *
- */
 // Application layer – Express API over hive data (calls bl functions to send data to frontend)
 
 import fs from "node:fs";
@@ -13,14 +9,12 @@ import {
     getCustomRangeTemperature,
     getLatestTemperatureReading,
     getTempMeasurement,
-    getTemperatureReadingAt,
     insertTemp,
 } from "../dataLinkLayer/temp.js";
 import {
     getCustomRangeHumidity,
     getLatestHumidityReading,
     getHumidityMeasurement,
-    getHumidityReadingAt,
     insertHumidity
 } from "../dataLinkLayer/humidity.js";
 import { isValidDateValue, toNumericReading } from "../busLayer/utils.js";
@@ -163,7 +157,6 @@ async function dateOutOfRange(d) {
 app.get("/temp/measurement", async (req, res) => {
     const datetime = req.query.datetime;
     
-    console.log(datetime);
     const timestamp = new Date(datetime);
 
     let timeOf = timestamp.getTime()/1000;
@@ -173,7 +166,6 @@ app.get("/temp/measurement", async (req, res) => {
     }
 
     const result = await getTempMeasurement(DEFAULT_HIVE_ID, timeOf);
-    console.log(result);
 
     const measurement = result.rows?.[0]?.reading ?? null;
     return res.status(200).json({ measurement });
@@ -186,9 +178,7 @@ app.get("/temp/measurement", async (req, res) => {
  */
 app.get("/temp/measurement/latest", async (req, res) => {
     try {
-        console.log("before the database");
         const result = await getLatestTemperatureReading(DEFAULT_HIVE_ID);
-        console.log("after the database");
         const measurement = result.rows?.[0]?.reading ?? null;
         const timestamp = result.rows?.[0]?.timestamp ?? null;
         return res.status(200).json({ measurement, timestamp });
@@ -237,6 +227,7 @@ app.get("/temp/day", async (req, res) => {
 /**
  * Gets roughly the past 7 days of data ending at datetime (same window logic as /day, but 7 days).
  *
+ * @param datetime Datetime as a string: 2026-01-14
  * @returns json
  */
 app.get("/temp/week", async (req, res) => {
@@ -316,10 +307,6 @@ app.get("/temp/range", async (req, res) => {
     const startParam = req.query.start;
     const endParam = req.query.end;
 
-    // console.log('startParam',startParam);
-    // console.log('endParam',endParam);
-
-    
     const startTime = startParam.replaceAll("%3A",":");
     const endTime = endParam.replaceAll("%3A",":");
     
@@ -390,7 +377,7 @@ app.post("/upload/temp", async (req, res) => {
     return res.status(200).json({ success: true });
 });
 
-// HUMIDITY ===========================================
+// ========================== HUMIDITY ================================
 
 /**
  * Gets data from a single timestamp.
@@ -401,7 +388,6 @@ app.post("/upload/temp", async (req, res) => {
 app.get("/Humidity/measurement", async (req, res) => {
     const datetime = req.query.datetime;
     
-    console.log(datetime);
     const timestamp = new Date(datetime);
 
     let timeOf = timestamp.getTime()/1000;
@@ -411,7 +397,6 @@ app.get("/Humidity/measurement", async (req, res) => {
     }
 
     const result = await getHumidityMeasurement(DEFAULT_HIVE_ID, timeOf);
-    console.log(result);
 
     const measurement = result.rows?.[0]?.reading ?? null;
     return res.status(200).json({ measurement });
@@ -674,34 +659,6 @@ app.post("/uploadall/", async (req, res) => {
     return res.status(200).json({ success: true });
 });
 
-/**
- * Production / Docker: serve Vite `dist/` from the same origin so `VITE_API_BASE` can be empty.
- * Local dev: skip unless `dist/index.html` exists and SERVE_STATIC is not "0".
- */
-// const __appDir = path.dirname(fileURLToPath(import.meta.url));
-// const distPath = path.resolve(__appDir, "../../../dist");
-// const distIndex = path.join(distPath, "index.html");
-// const shouldServeStatic =
-//     fs.existsSync(distIndex) &&
-//     (process.env.NODE_ENV === "production" || process.env.SERVE_STATIC === "1");
-
-// if (shouldServeStatic) {
-//     app.use(
-//         express.static(distPath, {
-//             fallthrough: true,
-//             index: false,
-//         })
-//     );
-//     app.get("*", (req, res, next) => {
-//         if (req.method !== "GET" && req.method !== "HEAD") {
-//             return next();
-//         }
-//         res.sendFile(distIndex, (err) => {
-//             if (err) next(err);
-//         });
-//     });
-// }
-
 //Serves the frontend
 const distDir = path.resolve(process.cwd(), "dist");
 const indexHtmlPath = path.join(distDir, "index.html");
@@ -724,7 +681,6 @@ function sendIndexHtml(res) {
         }
     });
 }
-
 
 app.get("/", (req, res) => sendIndexHtml(res));
 app.get(/.*/, (req, res) => sendIndexHtml(res));
@@ -760,9 +716,6 @@ if (shouldStartServer) {
             console.log(
                 `Backend listening on http://${host === "::" ? "localhost" : host}:${port}`
             );
-            // if (shouldServeStatic) {
-            //     console.log("[static] Vite UI from dist/ (same origin as API)");
-            // }
         });
 
         // Run DB connectivity check in the background and log the result.
