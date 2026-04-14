@@ -105,6 +105,35 @@ export function buildRolling24HourChart(points, anchorEnd, weatherByDateTime, cT
     out.push({ xLabel, internalTempF, externalTempF });
   }
 
+  // Append a true "current" point so the chart reaches the latest reading timestamp,
+  // not just the start of the final hourly bin.
+  const latestPoint = list
+    .filter((p) => {
+      const t = new Date(p.timestamp).getTime();
+      return !Number.isNaN(t) && t >= b0 && t <= T;
+    })
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .at(-1);
+
+  if (latestPoint) {
+    const latestInternal =
+      Number.isFinite(latestPoint.temperatureF) ? Math.round(latestPoint.temperatureF) : null;
+    let latestExternal = outsideTempFFromWeatherMap(
+      weatherByDateTime,
+      end,
+      cToF
+    );
+    if (latestExternal == null && latestInternal != null) {
+      latestExternal = getSyntheticExternalTempF(latestInternal, 23);
+    }
+    const nowLabel = new Intl.DateTimeFormat("en-US", {
+      timeZone: WEATHER_TIMEZONE,
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(end);
+    out.push({ xLabel: `${nowLabel} (now)`, internalTempF: latestInternal, externalTempF: latestExternal });
+  }
+
   return out;
 }
 

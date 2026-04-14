@@ -7,6 +7,7 @@ import HomeScreen from "./screens/HomeScreen";
 import AlertsScreen from "./screens/AlertsScreen";
 import DataScreen, { ExportModal } from "./screens/DataScreen";
 import { getCurrentReadingAlt, subscribeReadingUpdates } from "./services/api";
+import { HIVE_OFFLINE_GRACE_MS } from "./config/connectivity.js";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("home");
@@ -39,8 +40,7 @@ export default function App() {
     if (!lastReadingAt) return false;
     const ms = new Date(lastReadingAt).getTime();
     if (Number.isNaN(ms)) return false;
-    // Expect ~10 min cadence; allow slack for network/db latency.
-    return Date.now() - ms <= 15 * 60 * 1000;
+    return Date.now() - ms <= HIVE_OFFLINE_GRACE_MS;
   })();
 
   const screen = useMemo(() => {

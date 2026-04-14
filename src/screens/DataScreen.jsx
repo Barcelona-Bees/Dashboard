@@ -82,9 +82,9 @@ export default function DataScreen({ onOpenExport }) {
         <header className="pageHead">
           <h1 className="pageTitle">{DATA_OVERVIEW_DAYS}-day overview</h1>
           <p className="pageMeta">
-            {DATA_OVERVIEW_DAYS} local calendar days · daily averages with a continuous trend line
-            (missing days interpolated between known values for display only) · Last sample ·{" "}
-            {updatedAt}
+            Last {DATA_OVERVIEW_DAYS} local calendar days. Charts show daily averages with a
+            smoothed line for readability; export files always contain the raw readings. Last
+            sample · {updatedAt}
           </p>
         </header>
         <button
@@ -227,9 +227,9 @@ export function ExportModal({ rows, onClose }) {
         Export data
       </h2>
       <p className="modalLead" id="export-modal-desc">
-        Download every merged temperature and humidity sample in the last {DATA_OVERVIEW_DAYS}{" "}
-        local calendar days (same window as the overview charts), including each ~10 minute row
-        returned by the API for analytics.
+        Download all merged temperature and humidity readings from the same{" "}
+        {DATA_OVERVIEW_DAYS}-day window shown above, including each recorded sample (about every
+        10 minutes) for analysis.
       </p>
 
       <div className="modalRow">

@@ -6,14 +6,20 @@ import { HomeSkeleton } from "../components/Skeleton";
 import { THRESHOLDS_F, findRangeForValue } from "../config/thresholds";
 import {
   getCurrentReadingAlt,
+  getMergedRange,
   getTwoWeeksData,
   subscribeReadingUpdates,
 } from "../services/api";
 import {
   ALERTS_PAGE_SIZE,
   collectAlertsFromPoints,
+  collectConnectivityGapAlerts,
   filterPointsInLocalCalendarDay,
 } from "../services/alerts";
+import {
+  EXPECTED_READING_INTERVAL_MINUTES,
+  HIVE_OFFLINE_GRACE_MS,
+} from "../config/connectivity.js";
 import { transformToFrontendFormat, buildRolling24HourChart } from "../services/dataTransform";
 import { formatTimestamp, celsiusToFahrenheit } from "../utils/conversions";
 import {
@@ -38,6 +44,50 @@ const initialSnap = typeof window !== "undefined" ? loadHomeSnapshot() : null;
 
 /** Coalesce burst SSE `reading` events into one refresh. */
 const SSE_DEBOUNCE_MS = 350;
+
+function estimatePacketLossPctOverActiveSessions(points) {
+  if (!Array.isArray(points) || points.length === 0) return null;
+  const intervalMs = EXPECTED_READING_INTERVAL_MINUTES * 60 * 1000;
+  const times = points
+    .map((p) => new Date(p.timestamp).getTime())
+    .filter((t) => !Number.isNaN(t))
+    .sort((a, b) => a - b);
+  if (times.length === 0) return null;
+
+  let expectedTotal = 0;
+  let receivedTotal = 0;
+
+  let sessionStart = times[0];
+  let prev = times[0];
+  let slots = new Set([0]);
+
+  function closeSession() {
+    const duration = Math.max(0, prev - sessionStart);
+    const expected = Math.max(1, Math.floor(duration / intervalMs) + 1);
+    const received = Math.min(expected, slots.size);
+    expectedTotal += expected;
+    receivedTotal += received;
+  }
+
+  for (let i = 1; i < times.length; i++) {
+    const t = times[i];
+    if (t - prev > HIVE_OFFLINE_GRACE_MS) {
+      closeSession();
+      sessionStart = t;
+      prev = t;
+      slots = new Set([0]);
+      continue;
+    }
+    const slot = Math.floor((t - sessionStart) / intervalMs);
+    slots.add(slot);
+    prev = t;
+  }
+  closeSession();
+
+  if (expectedTotal <= 0) return null;
+  const loss = Math.max(0, 1 - receivedTotal / expectedTotal);
+  return Math.round(loss * 100);
+}
 
 export default function HomeScreen() {
   const contentShownRef = useRef(!!initialSnap);
@@ -111,7 +161,27 @@ export default function HomeScreen() {
           return;
         }
 
-        const frontendReadings = transformToFrontendFormat(current);
+        const nowMs = Date.now();
+        const latestMs = current?.timestamp ? new Date(current.timestamp).getTime() : NaN;
+        const hiveOnline = !Number.isNaN(latestMs) && nowMs - latestMs <= HIVE_OFFLINE_GRACE_MS;
+        const frontendReadings = transformToFrontendFormat(
+          current,
+          hiveOnline ? "Connected" : "Hive disconnected"
+        );
+        frontendReadings.packageLoss = null;
+        if (!Number.isNaN(latestMs)) {
+          try {
+            const end30 = new Date(latestMs);
+            const start30 = new Date(end30);
+            start30.setDate(start30.getDate() - 30);
+            const thirtyDayPoints = await getMergedRange(start30, end30);
+            frontendReadings.packageLoss = estimatePacketLossPctOverActiveSessions(
+              thirtyDayPoints
+            );
+          } catch (lossErr) {
+            console.warn("30-day packet loss estimate unavailable:", lossErr);
+          }
+        }
         setReadings(frontendReadings);
 
         const dateStr = current.timestamp
@@ -173,7 +243,15 @@ export default function HomeScreen() {
 
         const todayPoints = filterPointsInLocalCalendarDay(twoWeeks, new Date());
         const todayAlertsList = collectAlertsFromPoints(todayPoints);
-        setTodayAlerts(todayAlertsList);
+        const connectivityAll = collectConnectivityGapAlerts(twoWeeks, new Date());
+        const todayConnectivity = filterPointsInLocalCalendarDay(
+          connectivityAll.map((a) => ({ timestamp: a.readingAt, _alert: a })),
+          new Date()
+        ).map((p) => p._alert);
+        const todayWithConnectivity = [...todayConnectivity, ...todayAlertsList].sort(
+          (a, b) => new Date(b.readingAt).getTime() - new Date(a.readingAt).getTime()
+        );
+        setTodayAlerts(todayWithConnectivity);
         setTodayAlertsPage(1);
 
         const updated =
@@ -188,7 +266,7 @@ export default function HomeScreen() {
           currentOutsideTempF: outsideF,
           updatedAt: updated,
           empty: false,
-          todayAlerts: todayAlertsList,
+          todayAlerts: todayWithConnectivity,
         });
         contentShownRef.current = true;
         lastOkFetchAt = Date.now();
@@ -356,9 +434,9 @@ export default function HomeScreen() {
         className="thresholdTip"
         aria-label="How humidity and temperature bands are interpreted"
       >
-        Humidity bands follow common in-hive targets (~50–60% RH is often cited; &gt;75% can
-        increase condensation risk). Temperature bands use typical brood-area readings (~93–95°F)
-        as a reference — sensor placement and season change what you see.
+        Humidity is usually healthiest around 50–60% RH, while sustained high humidity can raise
+        condensation risk. Temperature guidance is based on typical brood-area ranges (~93–95°F),
+        but readings will vary by season and sensor placement.
       </aside>
 
       <section className="pageSection" aria-labelledby="hardware-heading">
@@ -369,9 +447,12 @@ export default function HomeScreen() {
             <span className="hardwareInfoValue">{readings.connectionStatus}</span>
           </div>
           <div className="hardwareInfoCard" aria-label="Package loss">
-            <span className="hardwareInfoLabel">Package loss</span>
+            <span className="hardwareInfoLabel">Packet loss (30d active sessions)</span>
             <span className="hardwareInfoValue">
-              {readings.packageLoss != null ? readings.packageLoss : "—"}
+              {readings.packageLoss != null ? `${readings.packageLoss}%` : "—"}
+            </span>
+            <span className="hardwareInfoLabel">
+              Excludes long offline/unhooked gaps (&gt;2h)
             </span>
           </div>
         </div>
@@ -394,11 +475,11 @@ export default function HomeScreen() {
             ]}
           />
           <div className="chartCaption">
-            Rolling 24 hours ending at the latest hive reading. Missing inside segments mean no
-            samples in that hour.{" "}
+            This chart shows the last 24 hours up to the most recent hive reading. If part of the
+            inside line is missing, we didn&apos;t receive data for that hour.{" "}
             {chartHasWeather
-              ? "Outside from Open-Meteo (Rochester); gaps use an estimate from inside when available."
-              : "Outside estimated from inside when weather is unavailable."}
+              ? "Outside temperature comes from Open-Meteo for Rochester, with a fallback estimate only when weather data is unavailable."
+              : "Outside temperature is estimated from inside because weather data is currently unavailable."}
           </div>
         </div>
       </section>
@@ -406,7 +487,7 @@ export default function HomeScreen() {
       <section className="pageSection" aria-labelledby="alerts-heading">
         <h2 id="alerts-heading" className="pageSectionTitle">Today&apos;s alerts</h2>
         <p className="pageSectionLead">
-          Readings from today (local time) that crossed humidity or temperature thresholds.
+          These are today&apos;s threshold alerts based on your local time.
         </p>
         <div className="stack">
           {todayAlerts.length === 0 ? (

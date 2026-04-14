@@ -5,6 +5,7 @@ import { AlertsSkeleton } from "../components/Skeleton";
 import { getMergedRange } from "../services/api";
 import {
   collectAlertsFromPoints,
+  collectConnectivityGapAlerts,
   ALERT_HISTORY_DAYS,
   ALERTS_PAGE_SIZE,
 } from "../services/alerts";
@@ -62,12 +63,16 @@ export default function AlertsScreen() {
         }
 
         const list = collectAlertsFromPoints(points);
-        setHistoricalAlerts(list);
+        const connectivity = collectConnectivityGapAlerts(points, end);
+        const withConnectivity = [...connectivity, ...list].sort(
+          (a, b) => new Date(b.readingAt).getTime() - new Date(a.readingAt).getTime()
+        );
+        setHistoricalAlerts(withConnectivity);
         const ts = formatTimestamp(end.toISOString());
         setUpdatedAt(ts);
         setEmpty(false);
         saveAlertsSnapshot({
-          historicalAlerts: list,
+          historicalAlerts: withConnectivity,
           updatedAt: ts,
           empty: false,
         });
