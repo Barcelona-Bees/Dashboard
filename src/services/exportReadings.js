@@ -1,6 +1,7 @@
 /**
- * Client-side export for merged reading rows from getTwoWeeksData() shape:
- * { timestamp, temperatureF, humidity }.
+ * Client-side export for merged reading rows (`{ timestamp, temperatureF, humidity }`).
+ * Pass the full time-ordered series for the window (e.g. getMergedFourteenDayLocalWindow) so
+ * every stored sample in range is included (~10 min cadence when the backend records that way).
  */
 
 function escapeCsvCell(val) {

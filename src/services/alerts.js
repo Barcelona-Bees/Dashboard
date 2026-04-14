@@ -74,26 +74,50 @@ export function computeAlerts(readings) {
   return computeAlertsAt(readings, new Date());
 }
 
+function alertSignatureByMetric(alerts) {
+  const out = new Map();
+  for (const a of alerts) {
+    out.set(a.metric, `${a.type}|${a.severity}|${a.text}`);
+  }
+  return out;
+}
+
 /**
  * Merged points: `{ timestamp, temperatureF, humidity }[]` (same shape as API merge).
+ * Emits alert history on state changes, not on every repeated sample in the same alert band.
  * @param {Array<{ timestamp: string, temperatureF: number, humidity: number|null }>} points
  * @returns {Array<object>} Newest first; includes `readingAt` (ISO timestamp string).
  */
 export function collectAlertsFromPoints(points) {
   if (!points || points.length === 0) return [];
 
+  const ordered = [...points].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
   const out = [];
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
+  const prevByMetric = new Map();
+
+  for (let i = 0; i < ordered.length; i++) {
+    const p = ordered[i];
     const readings = transformToFrontendFormat(p);
     const at = new Date(p.timestamp);
     const rowAlerts = computeAlertsAt(readings, at);
+    const currentByMetric = alertSignatureByMetric(rowAlerts);
+
     for (const a of rowAlerts) {
+      const prevSig = prevByMetric.get(a.metric) ?? null;
+      const nextSig = currentByMetric.get(a.metric) ?? null;
+      if (prevSig === nextSig) continue;
       out.push({
         ...a,
         id: `${a.id}-r${i}`,
         readingAt: typeof p.timestamp === "string" ? p.timestamp : String(p.timestamp),
       });
+    }
+
+    prevByMetric.clear();
+    for (const [metric, sig] of currentByMetric) {
+      prevByMetric.set(metric, sig);
     }
   }
 

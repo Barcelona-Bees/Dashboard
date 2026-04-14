@@ -17,6 +17,46 @@ const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1/forecast';
 const DEFAULT_LAT = 43.0848;
 const DEFAULT_LON = -77.6799;
 
+/** Open-Meteo hourly keys use this zone when `timezone` is set on the request. */
+export const WEATHER_TIMEZONE = 'America/New_York';
+
+/**
+ * Key matching `getHourlyOutsideTempsByDate` Map entries (`YYYY-MM-DD H:00`).
+ * @param {Date} instant
+ */
+export function weatherMapKeyForInstant(instant, timeZone = WEATHER_TIMEZONE) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: 'numeric',
+    hourCycle: 'h23',
+    minute: '2-digit',
+  }).formatToParts(instant);
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  const y = get('year');
+  const mo = String(get('month')).padStart(2, '0');
+  const day = String(get('day')).padStart(2, '0');
+  const hr = parseInt(get('hour'), 10);
+  if (!y || Number.isNaN(hr)) return '';
+  return `${y}-${mo}-${day} ${hr}:00`;
+}
+
+/**
+ * Outside °F for one instant, or null if missing from the forecast map.
+ */
+export function outsideTempFFromWeatherMap(weatherMap, instant, cToF) {
+  if (!weatherMap || !(weatherMap instanceof Map) || typeof cToF !== 'function') {
+    return null;
+  }
+  const key = weatherMapKeyForInstant(instant);
+  if (!key) return null;
+  const tempC = weatherMap.get(key);
+  if (tempC == null || Number.isNaN(tempC)) return null;
+  return Number(cToF(tempC).toFixed(1));
+}
+
 /**
  * Fetches hourly outside temperature for the last 2 days (yesterday + today)
  * so we can align with chart data by date.
@@ -29,6 +69,8 @@ export async function getHourlyOutsideTempsByDate(lat = DEFAULT_LAT, lon = DEFAU
     longitude: lon,
     hourly: 'temperature_2m',
     past_days: 1,
+    /** Align hourly keys with hive chart bins (Rochester, NY). */
+    timezone: 'America/New_York',
   });
   const url = `${OPEN_METEO_BASE}?${params.toString()}`;
 

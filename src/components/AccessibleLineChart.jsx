@@ -25,6 +25,28 @@ function nearestIndex(xs, x) {
   return best;
 }
 
+function isFiniteValue(v) {
+  return v != null && typeof v === "number" && Number.isFinite(v);
+}
+
+/** Split indices into runs of finite values for one series key (gaps = missing data). */
+function finiteRuns(data, seriesKey) {
+  const runs = [];
+  let cur = [];
+  for (let i = 0; i < data.length; i++) {
+    if (isFiniteValue(data[i]?.[seriesKey])) {
+      cur.push(i);
+    } else {
+      if (cur.length) {
+        runs.push(cur);
+        cur = [];
+      }
+    }
+  }
+  if (cur.length) runs.push(cur);
+  return runs;
+}
+
 export default function AccessibleLineChart(props) {
   const {
     title = "",
@@ -59,11 +81,16 @@ export default function AccessibleLineChart(props) {
 
   const allY = useMemo(() => {
     const ys = [];
-    for (const d of data) for (const s of series) ys.push(d[s.key]);
+    for (const d of data) {
+      for (const s of series) {
+        const v = d[s.key];
+        if (isFiniteValue(v)) ys.push(v);
+      }
+    }
     return ys;
   }, [data, series]);
 
-  if (!data || data.length === 0 || allY.length === 0) {
+  if (!data || data.length === 0) {
     return (
       <div className="chartRoot" role="status" aria-live="polite">
         <p className="emptyState">No data to display for this chart.</p>
@@ -71,8 +98,9 @@ export default function AccessibleLineChart(props) {
     );
   }
 
-  const yMin = Math.min(...allY);
-  const yMax = Math.max(...allY);
+  const hasFiniteY = allY.length > 0;
+  const yMin = hasFiniteY ? Math.min(...allY) : 40;
+  const yMax = hasFiniteY ? Math.max(...allY) : 100;
   if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) {
     return (
       <div className="chartRoot" role="status" aria-live="polite">
@@ -105,18 +133,36 @@ export default function AccessibleLineChart(props) {
     return ticks.sort((a, b) => a - b);
   }, [yMin, yMax]);
 
-  const paths = useMemo(() => {
+  const pathSegments = useMemo(() => {
     return series.map((s) => {
-      const pts = data.map((d, i) => `${xs[i]},${yFor(d[s.key])}`).join(" ");
-      return { ...s, pts };
+      const runs = finiteRuns(data, s.key);
+      const segments = [];
+      for (const run of runs) {
+        if (run.length >= 2) {
+          const pts = run.map((i) => `${xs[i]},${yFor(data[i][s.key])}`).join(" ");
+          segments.push({ kind: "polyline", pts });
+        } else if (run.length === 1) {
+          const i = run[0];
+          segments.push({
+            kind: "dot",
+            cx: xs[i],
+            cy: yFor(data[i][s.key]),
+          });
+        }
+      }
+      return { ...s, segments };
     });
-  }, [data, series, xs]);
+  }, [data, series, xs, yMin, yMax, plotBottom, plotHeight]);
 
   const activeX = xs[active] ?? xs[0];
   const activeLabel = xLabels[active] ?? "";
 
   const activeText = series
-    .map((s) => `${s.name}: ${data[active]?.[s.key]}`)
+    .map((s) => {
+      const v = data[active]?.[s.key];
+      const shown = isFiniteValue(v) ? v : "—";
+      return `${s.name}: ${shown}`;
+    })
     .join(", ");
 
   const onPointer = (clientX) => {
@@ -200,15 +246,31 @@ export default function AccessibleLineChart(props) {
           />
         ))}
 
-        {/* Lines */}
-        {paths.map((p, idx) => (
-          <polyline
-            key={p.key}
-            fill="none"
-            stroke={seriesColors[idx % seriesColors.length]}
-            strokeWidth="2.5"
-            points={p.pts}
-          />
+        {/* Lines (split at null / missing points) */}
+        {pathSegments.map((p, idx) => (
+          <g key={p.key}>
+            {p.segments.map((seg, j) =>
+              seg.kind === "polyline" ? (
+                <polyline
+                  key={`${p.key}-pl-${j}`}
+                  fill="none"
+                  stroke={seriesColors[idx % seriesColors.length]}
+                  strokeWidth="2.5"
+                  points={seg.pts}
+                />
+              ) : (
+                <circle
+                  key={`${p.key}-d-${j}`}
+                  cx={seg.cx}
+                  cy={seg.cy}
+                  r="3.5"
+                  fill={seriesColors[idx % seriesColors.length]}
+                  stroke="var(--surface-main)"
+                  strokeWidth="1.5"
+                />
+              )
+            )}
+          </g>
         ))}
 
         {/* Active vertical line */}
@@ -223,7 +285,9 @@ export default function AccessibleLineChart(props) {
 
         {/* Active points */}
         {series.map((s, idx) => {
-          const y = yFor(data[active]?.[s.key]);
+          const v = data[active]?.[s.key];
+          if (!isFiniteValue(v)) return null;
+          const y = yFor(v);
           return (
             <circle
               key={s.key}

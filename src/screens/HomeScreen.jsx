@@ -14,7 +14,7 @@ import {
   collectAlertsFromPoints,
   filterPointsInLocalCalendarDay,
 } from "../services/alerts";
-import { transformToFrontendFormat, transformTo24HourChart } from "../services/dataTransform";
+import { transformToFrontendFormat, buildRolling24HourChart } from "../services/dataTransform";
 import { formatTimestamp, celsiusToFahrenheit } from "../utils/conversions";
 import {
   getHourlyOutsideTempsByDate,
@@ -45,9 +45,9 @@ export default function HomeScreen() {
   const [readings, setReadings] = useState(initialSnap?.readings ?? null);
   const [chartData, setChartData] = useState(initialSnap?.chartData ?? []);
   const [chartDateStr, setChartDateStr] = useState(initialSnap?.chartDateStr ?? null); // YYYY-MM-DD for weather alignment
-  const [externalTempByHour, setExternalTempByHour] = useState(
-    initialSnap?.externalTempByHour ?? null
-  ); // { "0:00": 45, ... } in °F, or null if using synthetic
+  const [chartHasWeather, setChartHasWeather] = useState(
+    initialSnap?.chartHasWeather ?? !!(initialSnap?.externalTempByHour)
+  );
   const [currentOutsideTempF, setCurrentOutsideTempF] = useState(
     initialSnap?.currentOutsideTempF ?? null
   ); // single value for hero when we have weather
@@ -90,7 +90,7 @@ export default function HomeScreen() {
           setReadings(null);
           setChartData([]);
           setChartDateStr(null);
-          setExternalTempByHour(null);
+          setChartHasWeather(false);
           setCurrentOutsideTempF(null);
           setUpdatedAt("");
           setEmpty(true);
@@ -98,7 +98,7 @@ export default function HomeScreen() {
             readings: null,
             chartData: [],
             chartDateStr: null,
-            externalTempByHour: null,
+            chartHasWeather: false,
             currentOutsideTempF: null,
             updatedAt: "",
             empty: true,
@@ -114,38 +114,30 @@ export default function HomeScreen() {
         const frontendReadings = transformToFrontendFormat(current);
         setReadings(frontendReadings);
 
-        const last24h = twoWeeks.slice(-144);
-        const chart24h = transformTo24HourChart(last24h);
-        setChartData(chart24h);
-
-        const todayPoints = filterPointsInLocalCalendarDay(twoWeeks, new Date());
-        const todayAlertsList = collectAlertsFromPoints(todayPoints);
-        setTodayAlerts(todayAlertsList);
-        setTodayAlertsPage(1);
-
-        const dateStr =
-          last24h.length > 0
-            ? new Date(last24h[last24h.length - 1].timestamp).toISOString().split("T")[0]
-            : null;
+        const dateStr = current.timestamp
+          ? new Date(current.timestamp).toISOString().split("T")[0]
+          : null;
         setChartDateStr(dateStr);
 
-        let extHour = null;
+        let weatherMap = null;
+        let chartWeatherOk = false;
         let outsideF = null;
         try {
-          const weatherMap = await getHourlyOutsideTempsByDate();
+          weatherMap = await getHourlyOutsideTempsByDate();
           if (cancelled) return;
+          chartWeatherOk = weatherMap instanceof Map && weatherMap.size > 0;
+          setChartHasWeather(chartWeatherOk);
+
           const now = new Date();
           const todayStr = now.toISOString().split("T")[0];
           const hourLabel = `${now.getHours()}:00`;
 
-          // Outside temps should reflect *current* Rochester weather whenever available,
-          // even if backend chart data is from an older date.
-          const forToday = buildExternalTempFMapForDate(todayStr, weatherMap, celsiusToFahrenheit);
+          const forToday = buildExternalTempFMapForDate(
+            todayStr,
+            weatherMap,
+            celsiusToFahrenheit
+          );
           const hasTodayWeather = Object.keys(forToday).length > 0;
-
-          // Chart outside line: use today's Rochester hourly temps (keys match "0:00".."23:00").
-          extHour = hasTodayWeather ? forToday : null;
-          setExternalTempByHour(extHour);
 
           if (hasTodayWeather) {
             const forCurrentHour = forToday[hourLabel];
@@ -164,10 +156,25 @@ export default function HomeScreen() {
         } catch (weatherErr) {
           console.warn("Outside temp from weather API unavailable, using estimate:", weatherErr);
           if (!cancelled) {
-            setExternalTempByHour(null);
+            weatherMap = null;
+            chartWeatherOk = false;
+            setChartHasWeather(false);
             setCurrentOutsideTempF(null);
           }
         }
+
+        const chart24h = buildRolling24HourChart(
+          twoWeeks,
+          current.timestamp,
+          weatherMap,
+          celsiusToFahrenheit
+        );
+        setChartData(chart24h);
+
+        const todayPoints = filterPointsInLocalCalendarDay(twoWeeks, new Date());
+        const todayAlertsList = collectAlertsFromPoints(todayPoints);
+        setTodayAlerts(todayAlertsList);
+        setTodayAlertsPage(1);
 
         const updated =
           current.timestamp ? formatTimestamp(current.timestamp) : "";
@@ -177,7 +184,7 @@ export default function HomeScreen() {
           readings: frontendReadings,
           chartData: chart24h,
           chartDateStr: dateStr,
-          externalTempByHour: extHour,
+          chartHasWeather: chartWeatherOk,
           currentOutsideTempF: outsideF,
           updatedAt: updated,
           empty: false,
@@ -375,17 +382,11 @@ export default function HomeScreen() {
         <div className="chartFrame">
           <AccessibleLineChart
             title="Inside vs outside temperature (last 24 hours)"
-            data={chartData.map((p, i) => {
-              const externalF =
-                externalTempByHour != null && externalTempByHour[p.t] != null
-                  ? externalTempByHour[p.t]
-                  : getSyntheticExternalTempF(p.internalTempF, i);
-              return {
-                xLabel: p.t,
-                internalTemp: p.internalTempF,
-                externalTemp: externalF,
-              };
-            })}
+            data={chartData.map((p) => ({
+              xLabel: p.xLabel ?? p.t,
+              internalTemp: p.internalTempF,
+              externalTemp: p.externalTempF ?? null,
+            }))}
             xLabelKey="xLabel"
             series={[
               { key: "internalTemp", name: "Inside hive (°F)" },
@@ -393,10 +394,11 @@ export default function HomeScreen() {
             ]}
           />
           <div className="chartCaption">
-            Time of day (24-hour clock).
-            {externalTempByHour != null
-              ? " Outside temperature from weather (Open-Meteo)."
-              : " Outside temperature estimated (no weather data for this date)."}
+            Rolling 24 hours ending at the latest hive reading. Missing inside segments mean no
+            samples in that hour.{" "}
+            {chartHasWeather
+              ? "Outside from Open-Meteo (Rochester); gaps use an estimate from inside when available."
+              : "Outside estimated from inside when weather is unavailable."}
           </div>
         </div>
       </section>
