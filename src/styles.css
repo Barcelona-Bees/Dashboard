@@ -225,6 +225,9 @@ button, input, select { font: inherit; }
   background: var(--success);
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
 }
+.hiveStatus[data-status="offline"] .hiveStatusDot {
+  background: var(--danger);
+}
 .hamburger {
   border: none;
   background: rgba(255,255,255,.15);
