@@ -10,6 +10,9 @@ import { transformToFrontendFormat } from "./dataTransform";
 /** Rolling window for the Alerts screen (days). */
 export const ALERT_HISTORY_DAYS = 30;
 
+/** Page size for paginated alert lists (Home “today”, Notifications history). */
+export const ALERTS_PAGE_SIZE = 15;
+
 function formatAlertTime(date) {
   return date.toLocaleString(undefined, {
     month: "short",

@@ -10,6 +10,7 @@ import {
   subscribeReadingUpdates,
 } from "../services/api";
 import {
+  ALERTS_PAGE_SIZE,
   collectAlertsFromPoints,
   filterPointsInLocalCalendarDay,
 } from "../services/alerts";
@@ -55,6 +56,7 @@ export default function HomeScreen() {
   const [error, setError] = useState(null);
   const [empty, setEmpty] = useState(initialSnap?.empty ?? false);
   const [todayAlerts, setTodayAlerts] = useState(initialSnap?.todayAlerts ?? []);
+  const [todayAlertsPage, setTodayAlertsPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +105,7 @@ export default function HomeScreen() {
             todayAlerts: [],
           });
           setTodayAlerts([]);
+          setTodayAlertsPage(1);
           contentShownRef.current = true;
           lastOkFetchAt = Date.now();
           return;
@@ -118,6 +121,7 @@ export default function HomeScreen() {
         const todayPoints = filterPointsInLocalCalendarDay(twoWeeks, new Date());
         const todayAlertsList = collectAlertsFromPoints(todayPoints);
         setTodayAlerts(todayAlertsList);
+        setTodayAlertsPage(1);
 
         const dateStr =
           last24h.length > 0
@@ -279,6 +283,13 @@ export default function HomeScreen() {
     THRESHOLDS_F.internalTempF.ranges
   );
 
+  const todayTotalPages = Math.max(1, Math.ceil(todayAlerts.length / ALERTS_PAGE_SIZE));
+  const safeTodayPage = Math.min(Math.max(1, todayAlertsPage), todayTotalPages);
+  const todayAlertsSlice = todayAlerts.slice(
+    (safeTodayPage - 1) * ALERTS_PAGE_SIZE,
+    safeTodayPage * ALERTS_PAGE_SIZE
+  );
+
   return (
     <div className="page">
       <header className="pageHead">
@@ -401,7 +412,7 @@ export default function HomeScreen() {
               No threshold alerts yet today — hive looks healthy
             </div>
           ) : (
-            todayAlerts.map((a) => (
+            todayAlertsSlice.map((a) => (
               <AlertCard
                 key={a.id}
                 type={a.type}
@@ -412,6 +423,31 @@ export default function HomeScreen() {
             ))
           )}
         </div>
+        {todayAlerts.length > ALERTS_PAGE_SIZE ? (
+          <nav className="paginationBar" aria-label="Today's alerts pages">
+            <button
+              type="button"
+              className="exportBtn"
+              disabled={safeTodayPage <= 1}
+              onClick={() => setTodayAlertsPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </button>
+            <span className="paginationInfo">
+              Page {safeTodayPage} of {todayTotalPages}
+            </span>
+            <button
+              type="button"
+              className="exportBtn"
+              disabled={safeTodayPage >= todayTotalPages}
+              onClick={() =>
+                setTodayAlertsPage((p) => Math.min(todayTotalPages, p + 1))
+              }
+            >
+              Next
+            </button>
+          </nav>
+        ) : null}
       </section>
     </div>
   );
