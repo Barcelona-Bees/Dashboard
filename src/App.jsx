@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Header from "./ui/Header";
 import AppFooter from "./ui/AppFooter";
 import SideMenu from "./ui/SideMenu";
@@ -6,12 +6,42 @@ import SideMenu from "./ui/SideMenu";
 import HomeScreen from "./screens/HomeScreen";
 import AlertsScreen from "./screens/AlertsScreen";
 import DataScreen, { ExportModal } from "./screens/DataScreen";
+import { getCurrentReadingAlt, subscribeReadingUpdates } from "./services/api";
+import { HIVE_OFFLINE_GRACE_MS } from "./config/connectivity.js";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("home");
   const [menuOpen, setMenuOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportRows, setExportRows] = useState(null);
+  const [lastReadingAt, setLastReadingAt] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshLatest() {
+      const latest = await getCurrentReadingAlt();
+      if (cancelled) return;
+      if (latest?.timestamp) setLastReadingAt(String(latest.timestamp));
+    }
+
+    refreshLatest();
+    const unsub = subscribeReadingUpdates(refreshLatest);
+    const poll = setInterval(refreshLatest, 5 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      unsub();
+      clearInterval(poll);
+    };
+  }, []);
+
+  const hiveOnline = (() => {
+    if (!lastReadingAt) return false;
+    const ms = new Date(lastReadingAt).getTime();
+    if (Number.isNaN(ms)) return false;
+    return Date.now() - ms <= HIVE_OFFLINE_GRACE_MS;
+  })();
 
   const screen = useMemo(() => {
     switch (activeTab) {
@@ -48,7 +78,15 @@ export default function App() {
         Skip to main content
       </a>
       <div className="appShell">
-        <Header menuOpen={menuOpen} onMenu={() => setMenuOpen(true)} />
+        <Header
+          menuOpen={menuOpen}
+          onMenu={() => setMenuOpen(true)}
+          onHome={() => {
+            setActiveTab("home");
+            setMenuOpen(false);
+          }}
+          hiveOnline={hiveOnline}
+        />
         <SideMenu
           open={menuOpen}
           activeTab={activeTab}

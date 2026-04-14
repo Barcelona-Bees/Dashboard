@@ -1,4 +1,4 @@
-export default function Header({ onMenu, menuOpen }) {
+export default function Header({ onMenu, menuOpen, onHome, hiveOnline }) {
   return (
     <header className="topBar" role="banner">
       <button
@@ -12,7 +12,13 @@ export default function Header({ onMenu, menuOpen }) {
         ☰
       </button>
 
-      <div className="topBarCenter">
+      <button
+        type="button"
+        className="topBarCenter"
+        onClick={onHome}
+        aria-label="Go to Home"
+        style={{ background: "transparent", border: "none", cursor: "pointer" }}
+      >
         <div className="brandMark">
           <img
             className="brandMarkImg"
@@ -25,14 +31,14 @@ export default function Header({ onMenu, menuOpen }) {
         </div>
         <div className="brandText">
           <span className="brandTitle">Barcelona Bees</span>
-          <span className="brandSubtitle">Beehive monitoring system</span>
+          <span className="brandSubtitle">BeeBuddy monitoring system</span>
         </div>
-      </div>
+      </button>
 
       <div className="topBarRight">
-        <span className="hiveStatus">
+        <span className="hiveStatus" data-status={hiveOnline ? "online" : "offline"}>
           <span className="hiveStatusDot" aria-hidden="true" />
-          Hive online
+          {hiveOnline ? "Hive online" : "Hive offline"}
         </span>
         <div className="logoBadge" aria-hidden="true" title="Barcelona Bees">
           <img className="logoBadgeImg" src="/favicon.svg" alt="" width={32} height={32} decoding="async" />

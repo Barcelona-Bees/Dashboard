@@ -3,11 +3,14 @@ import { useState, useEffect, useRef } from "react";
 import AlertCard from "../components/AlertCard";
 import { AlertsSkeleton } from "../components/Skeleton";
 import { getMergedRange } from "../services/api";
-import { collectAlertsFromPoints, ALERT_HISTORY_DAYS } from "../services/alerts";
+import {
+  collectAlertsFromPoints,
+  collectConnectivityGapAlerts,
+  ALERT_HISTORY_DAYS,
+  ALERTS_PAGE_SIZE,
+} from "../services/alerts";
 import { formatTimestamp } from "../utils/conversions";
 import { loadAlertsSnapshot, saveAlertsSnapshot } from "../services/alertsCache";
-
-const PAGE_SIZE = 15;
 
 const initialSnap = typeof window !== "undefined" ? loadAlertsSnapshot() : null;
 
@@ -60,12 +63,16 @@ export default function AlertsScreen() {
         }
 
         const list = collectAlertsFromPoints(points);
-        setHistoricalAlerts(list);
+        const connectivity = collectConnectivityGapAlerts(points, end);
+        const withConnectivity = [...connectivity, ...list].sort(
+          (a, b) => new Date(b.readingAt).getTime() - new Date(a.readingAt).getTime()
+        );
+        setHistoricalAlerts(withConnectivity);
         const ts = formatTimestamp(end.toISOString());
         setUpdatedAt(ts);
         setEmpty(false);
         saveAlertsSnapshot({
-          historicalAlerts: list,
+          historicalAlerts: withConnectivity,
           updatedAt: ts,
           empty: false,
         });
@@ -129,11 +136,11 @@ export default function AlertsScreen() {
     );
   }
 
-  const totalPages = Math.max(1, Math.ceil(historicalAlerts.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(historicalAlerts.length / ALERTS_PAGE_SIZE));
   const safePage = Math.min(Math.max(1, page), totalPages);
   const pageSlice = historicalAlerts.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE
+    (safePage - 1) * ALERTS_PAGE_SIZE,
+    safePage * ALERTS_PAGE_SIZE
   );
 
   return (
@@ -166,7 +173,7 @@ export default function AlertsScreen() {
           )}
         </div>
 
-        {historicalAlerts.length > PAGE_SIZE ? (
+        {historicalAlerts.length > ALERTS_PAGE_SIZE ? (
           <nav className="paginationBar" aria-label="Alert history pages">
             <button
               type="button"

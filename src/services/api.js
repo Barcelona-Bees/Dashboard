@@ -5,6 +5,8 @@
  * Temperature values are treated as °F at the dashboard layer (matches DB `reading` for this project).
  */
 
+import { DATA_OVERVIEW_DAYS } from "../config/readingsWindow.js";
+
 /** Empty string = same origin (Docker / single Express host). Undefined = dev default. */
 const API_BASE = (() => {
   if (typeof import.meta === "undefined") return "http://localhost:3001";
@@ -119,6 +121,30 @@ export async function getMergedRange(start, end) {
     fetchMeasurementJson(`/Humidity/range${qs}`).catch(() => ({ measurement: [] })),
   ]);
   return mergeHumidityOntoTempRows(measurementRows(tempJson), measurementRows(humJson));
+}
+
+/**
+ * Local-calendar window for the Data overview: midnight on day (N − 13) through `end` instant.
+ * @param {Date} [end] defaults to now
+ * @returns {{ start: Date, end: Date }}
+ */
+export function getFourteenDayLocalRange(end = new Date()) {
+  const e = end instanceof Date ? new Date(end.getTime()) : new Date(end);
+  const endDayStart = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+  const start = new Date(endDayStart);
+  start.setDate(start.getDate() - (DATA_OVERVIEW_DAYS - 1));
+  return { start, end: e };
+}
+
+/**
+ * Merged temp + humidity rows for the last DATA_OVERVIEW_DAYS local calendar days,
+ * oldest → newest (every stored sample in range, e.g. ~10 min cadence).
+ */
+export async function getMergedFourteenDayLocalWindow(end = new Date()) {
+  const { start, end: hi } = getFourteenDayLocalRange(end);
+  const rows = await getMergedRange(start, hi);
+  rows.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  return rows;
 }
 
 /**

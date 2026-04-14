@@ -1,10 +1,14 @@
-/* Historical charts: reads real two-week series from GET /temp/twoweeks (+ humidity merge in api.js). */
+/* Historical charts: 14 local calendar days from merged /temp/range + /Humidity/range. */
 import Modal from "../ui/Modal";
 import { DataSkeleton } from "../components/Skeleton";
 import { useState, useEffect } from "react";
 import AccessibleLineChart from "../components/AccessibleLineChart";
-import { getTwoWeeksData } from "../services/api";
-import { transformTo2WeekChart } from "../services/dataTransform";
+import { getMergedFourteenDayLocalWindow } from "../services/api";
+import {
+  build14DayOverviewSeries,
+  withFourteenDayTrendOverlay,
+} from "../services/dataTransform";
+import { DATA_OVERVIEW_DAYS } from "../config/readingsWindow.js";
 import { formatTimestamp } from "../utils/conversions";
 import {
   buildExportPayload,
@@ -28,32 +32,9 @@ export default function DataScreen({ onOpenExport }) {
         setLoading(true);
         setError(null);
 
-        const data = await getTwoWeeksData();
+        const data = await getMergedFourteenDayLocalWindow();
         setRawRows(Array.isArray(data) ? data : []);
-        const chartData = transformTo2WeekChart(data);
-
-        const dailyHumidity = {};
-        data.forEach(({ timestamp, humidity }) => {
-          const dayKey = new Date(timestamp).toISOString().split("T")[0];
-          if (!dailyHumidity[dayKey]) dailyHumidity[dayKey] = [];
-          if (humidity != null && !Number.isNaN(humidity)) {
-            dailyHumidity[dayKey].push(humidity);
-          }
-        });
-
-        const formatted = chartData.map((p) => {
-          const arr = dailyHumidity[p.dateStr];
-          const avgH =
-            arr && arr.length > 0
-              ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length)
-              : null;
-          return {
-            xLabel: p.d,
-            temperature: p.value,
-            humidity: avgH,
-          };
-        });
-
+        const formatted = build14DayOverviewSeries(data);
         setSeriesData(formatted);
         const mostRecentTimestamp =
           data.length > 0 ? data[data.length - 1].timestamp : null;
@@ -91,34 +72,32 @@ export default function DataScreen({ onOpenExport }) {
     );
   }
 
-  const hasData = seriesData.length > 0;
-  const humidityChartData = seriesData.filter((p) => p.humidity != null);
-  const hasHumidity = humidityChartData.length > 0;
+  const hasHumidity = seriesData.some((p) => p.humidity != null);
+  const hasTemperature = seriesData.some((p) => p.temperature != null);
+  const chartRows = withFourteenDayTrendOverlay(seriesData);
 
   return (
     <div className="page">
       <div className="dataTopRow">
         <header className="pageHead">
-          <h1 className="pageTitle">2-week overview</h1>
-          <p className="pageMeta">Last updated · {updatedAt}</p>
+          <h1 className="pageTitle">{DATA_OVERVIEW_DAYS}-day overview</h1>
+          <p className="pageMeta">
+            Last {DATA_OVERVIEW_DAYS} local calendar days. Charts show daily averages with a
+            smoothed line for readability; export files always contain the raw readings. Last
+            sample · {updatedAt}
+          </p>
         </header>
         <button
           type="button"
           className="exportBtn exportBtn--brand"
           onClick={() => onOpenExport(rawRows)}
-          disabled={!hasData || rawRows.length === 0}
+          disabled={rawRows.length === 0}
         >
           Export
         </button>
       </div>
 
-      {!hasData ? (
-        <div className="emptyState" style={{ marginTop: 24 }}>
-          No historical data yet. Data will appear once the sensor starts
-          reporting.
-        </div>
-      ) : (
-        <div className="dataGrid">
+      <div className="dataGrid">
           <div className="chartFrame chartFrame--temp">
             <div className="chartFrameHead">
               <span className="chartFrameIcon" aria-hidden="true">
@@ -134,13 +113,19 @@ export default function DataScreen({ onOpenExport }) {
               </span>
               <span className="chartFrameTitle">Temperature (°F)</span>
             </div>
-            <AccessibleLineChart
-              title=""
-              data={seriesData}
-              xLabelKey="xLabel"
-              series={[{ key: "temperature", name: "Temperature (°F)" }]}
-              seriesColors={["var(--chart-series-temp)"]}
-            />
+            {hasTemperature ? (
+              <AccessibleLineChart
+                title=""
+                data={chartRows}
+                xLabelKey="xLabel"
+                series={[{ key: "temperatureForChart", name: "Temperature (°F)" }]}
+                seriesColors={["var(--chart-series-temp)"]}
+              />
+            ) : (
+              <div className="emptyState" style={{ padding: 24 }}>
+                No temperature readings in the last {DATA_OVERVIEW_DAYS} local calendar days.
+              </div>
+            )}
           </div>
 
           <div className="chartFrame chartFrame--hum">
@@ -162,21 +147,20 @@ export default function DataScreen({ onOpenExport }) {
                 </div>
                 <AccessibleLineChart
                   title=""
-                  data={humidityChartData}
+                  data={chartRows}
                   xLabelKey="xLabel"
-                  series={[{ key: "humidity", name: "Humidity (%)" }]}
+                  series={[{ key: "humidityForChart", name: "Humidity (%)" }]}
                   seriesColors={["var(--chart-series-hum)"]}
                 />
               </>
             ) : (
               <div className="emptyState" style={{ padding: 24 }}>
                 No humidity history in this range — upload humidity or ensure
-                /Humidity/twoweeks returns rows.
+                /Humidity/range returns rows for the same window.
               </div>
             )}
           </div>
         </div>
-      )}
     </div>
   );
 }
@@ -243,8 +227,9 @@ export function ExportModal({ rows, onClose }) {
         Export data
       </h2>
       <p className="modalLead" id="export-modal-desc">
-        Download merged temperature and humidity rows from the current 2-week window (same source
-        as the charts).
+        Download all merged temperature and humidity readings from the same{" "}
+        {DATA_OVERVIEW_DAYS}-day window shown above, including each recorded sample (about every
+        10 minutes) for analysis.
       </p>
 
       <div className="modalRow">

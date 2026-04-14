@@ -6,14 +6,21 @@ import { HomeSkeleton } from "../components/Skeleton";
 import { THRESHOLDS_F, findRangeForValue } from "../config/thresholds";
 import {
   getCurrentReadingAlt,
+  getMergedRange,
   getTwoWeeksData,
   subscribeReadingUpdates,
 } from "../services/api";
 import {
+  ALERTS_PAGE_SIZE,
   collectAlertsFromPoints,
+  collectConnectivityGapAlerts,
   filterPointsInLocalCalendarDay,
 } from "../services/alerts";
-import { transformToFrontendFormat, transformTo24HourChart } from "../services/dataTransform";
+import {
+  EXPECTED_READING_INTERVAL_MINUTES,
+  HIVE_OFFLINE_GRACE_MS,
+} from "../config/connectivity.js";
+import { transformToFrontendFormat, buildRolling24HourChart } from "../services/dataTransform";
 import { formatTimestamp, celsiusToFahrenheit } from "../utils/conversions";
 import {
   getHourlyOutsideTempsByDate,
@@ -38,15 +45,59 @@ const initialSnap = typeof window !== "undefined" ? loadHomeSnapshot() : null;
 /** Coalesce burst SSE `reading` events into one refresh. */
 const SSE_DEBOUNCE_MS = 350;
 
+function estimatePacketLossPctOverActiveSessions(points) {
+  if (!Array.isArray(points) || points.length === 0) return null;
+  const intervalMs = EXPECTED_READING_INTERVAL_MINUTES * 60 * 1000;
+  const times = points
+    .map((p) => new Date(p.timestamp).getTime())
+    .filter((t) => !Number.isNaN(t))
+    .sort((a, b) => a - b);
+  if (times.length === 0) return null;
+
+  let expectedTotal = 0;
+  let receivedTotal = 0;
+
+  let sessionStart = times[0];
+  let prev = times[0];
+  let slots = new Set([0]);
+
+  function closeSession() {
+    const duration = Math.max(0, prev - sessionStart);
+    const expected = Math.max(1, Math.floor(duration / intervalMs) + 1);
+    const received = Math.min(expected, slots.size);
+    expectedTotal += expected;
+    receivedTotal += received;
+  }
+
+  for (let i = 1; i < times.length; i++) {
+    const t = times[i];
+    if (t - prev > HIVE_OFFLINE_GRACE_MS) {
+      closeSession();
+      sessionStart = t;
+      prev = t;
+      slots = new Set([0]);
+      continue;
+    }
+    const slot = Math.floor((t - sessionStart) / intervalMs);
+    slots.add(slot);
+    prev = t;
+  }
+  closeSession();
+
+  if (expectedTotal <= 0) return null;
+  const loss = Math.max(0, 1 - receivedTotal / expectedTotal);
+  return Math.round(loss * 100);
+}
+
 export default function HomeScreen() {
   const contentShownRef = useRef(!!initialSnap);
 
   const [readings, setReadings] = useState(initialSnap?.readings ?? null);
   const [chartData, setChartData] = useState(initialSnap?.chartData ?? []);
   const [chartDateStr, setChartDateStr] = useState(initialSnap?.chartDateStr ?? null); // YYYY-MM-DD for weather alignment
-  const [externalTempByHour, setExternalTempByHour] = useState(
-    initialSnap?.externalTempByHour ?? null
-  ); // { "0:00": 45, ... } in °F, or null if using synthetic
+  const [chartHasWeather, setChartHasWeather] = useState(
+    initialSnap?.chartHasWeather ?? !!(initialSnap?.externalTempByHour)
+  );
   const [currentOutsideTempF, setCurrentOutsideTempF] = useState(
     initialSnap?.currentOutsideTempF ?? null
   ); // single value for hero when we have weather
@@ -55,6 +106,7 @@ export default function HomeScreen() {
   const [error, setError] = useState(null);
   const [empty, setEmpty] = useState(initialSnap?.empty ?? false);
   const [todayAlerts, setTodayAlerts] = useState(initialSnap?.todayAlerts ?? []);
+  const [todayAlertsPage, setTodayAlertsPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,7 +140,7 @@ export default function HomeScreen() {
           setReadings(null);
           setChartData([]);
           setChartDateStr(null);
-          setExternalTempByHour(null);
+          setChartHasWeather(false);
           setCurrentOutsideTempF(null);
           setUpdatedAt("");
           setEmpty(true);
@@ -96,52 +148,66 @@ export default function HomeScreen() {
             readings: null,
             chartData: [],
             chartDateStr: null,
-            externalTempByHour: null,
+            chartHasWeather: false,
             currentOutsideTempF: null,
             updatedAt: "",
             empty: true,
             todayAlerts: [],
           });
           setTodayAlerts([]);
+          setTodayAlertsPage(1);
           contentShownRef.current = true;
           lastOkFetchAt = Date.now();
           return;
         }
 
-        const frontendReadings = transformToFrontendFormat(current);
+        const nowMs = Date.now();
+        const latestMs = current?.timestamp ? new Date(current.timestamp).getTime() : NaN;
+        const hiveOnline = !Number.isNaN(latestMs) && nowMs - latestMs <= HIVE_OFFLINE_GRACE_MS;
+        const frontendReadings = transformToFrontendFormat(
+          current,
+          hiveOnline ? "Connected" : "Hive disconnected"
+        );
+        frontendReadings.packageLoss = null;
+        if (!Number.isNaN(latestMs)) {
+          try {
+            const end30 = new Date(latestMs);
+            const start30 = new Date(end30);
+            start30.setDate(start30.getDate() - 30);
+            const thirtyDayPoints = await getMergedRange(start30, end30);
+            frontendReadings.packageLoss = estimatePacketLossPctOverActiveSessions(
+              thirtyDayPoints
+            );
+          } catch (lossErr) {
+            console.warn("30-day packet loss estimate unavailable:", lossErr);
+          }
+        }
         setReadings(frontendReadings);
 
-        const last24h = twoWeeks.slice(-144);
-        const chart24h = transformTo24HourChart(last24h);
-        setChartData(chart24h);
-
-        const todayPoints = filterPointsInLocalCalendarDay(twoWeeks, new Date());
-        const todayAlertsList = collectAlertsFromPoints(todayPoints);
-        setTodayAlerts(todayAlertsList);
-
-        const dateStr =
-          last24h.length > 0
-            ? new Date(last24h[last24h.length - 1].timestamp).toISOString().split("T")[0]
-            : null;
+        const dateStr = current.timestamp
+          ? new Date(current.timestamp).toISOString().split("T")[0]
+          : null;
         setChartDateStr(dateStr);
 
-        let extHour = null;
+        let weatherMap = null;
+        let chartWeatherOk = false;
         let outsideF = null;
         try {
-          const weatherMap = await getHourlyOutsideTempsByDate();
+          weatherMap = await getHourlyOutsideTempsByDate();
           if (cancelled) return;
+          chartWeatherOk = weatherMap instanceof Map && weatherMap.size > 0;
+          setChartHasWeather(chartWeatherOk);
+
           const now = new Date();
           const todayStr = now.toISOString().split("T")[0];
           const hourLabel = `${now.getHours()}:00`;
 
-          // Outside temps should reflect *current* Rochester weather whenever available,
-          // even if backend chart data is from an older date.
-          const forToday = buildExternalTempFMapForDate(todayStr, weatherMap, celsiusToFahrenheit);
+          const forToday = buildExternalTempFMapForDate(
+            todayStr,
+            weatherMap,
+            celsiusToFahrenheit
+          );
           const hasTodayWeather = Object.keys(forToday).length > 0;
-
-          // Chart outside line: use today's Rochester hourly temps (keys match "0:00".."23:00").
-          extHour = hasTodayWeather ? forToday : null;
-          setExternalTempByHour(extHour);
 
           if (hasTodayWeather) {
             const forCurrentHour = forToday[hourLabel];
@@ -160,10 +226,33 @@ export default function HomeScreen() {
         } catch (weatherErr) {
           console.warn("Outside temp from weather API unavailable, using estimate:", weatherErr);
           if (!cancelled) {
-            setExternalTempByHour(null);
+            weatherMap = null;
+            chartWeatherOk = false;
+            setChartHasWeather(false);
             setCurrentOutsideTempF(null);
           }
         }
+
+        const chart24h = buildRolling24HourChart(
+          twoWeeks,
+          current.timestamp,
+          weatherMap,
+          celsiusToFahrenheit
+        );
+        setChartData(chart24h);
+
+        const todayPoints = filterPointsInLocalCalendarDay(twoWeeks, new Date());
+        const todayAlertsList = collectAlertsFromPoints(todayPoints);
+        const connectivityAll = collectConnectivityGapAlerts(twoWeeks, new Date());
+        const todayConnectivity = filterPointsInLocalCalendarDay(
+          connectivityAll.map((a) => ({ timestamp: a.readingAt, _alert: a })),
+          new Date()
+        ).map((p) => p._alert);
+        const todayWithConnectivity = [...todayConnectivity, ...todayAlertsList].sort(
+          (a, b) => new Date(b.readingAt).getTime() - new Date(a.readingAt).getTime()
+        );
+        setTodayAlerts(todayWithConnectivity);
+        setTodayAlertsPage(1);
 
         const updated =
           current.timestamp ? formatTimestamp(current.timestamp) : "";
@@ -173,11 +262,11 @@ export default function HomeScreen() {
           readings: frontendReadings,
           chartData: chart24h,
           chartDateStr: dateStr,
-          externalTempByHour: extHour,
+          chartHasWeather: chartWeatherOk,
           currentOutsideTempF: outsideF,
           updatedAt: updated,
           empty: false,
-          todayAlerts: todayAlertsList,
+          todayAlerts: todayWithConnectivity,
         });
         contentShownRef.current = true;
         lastOkFetchAt = Date.now();
@@ -279,6 +368,13 @@ export default function HomeScreen() {
     THRESHOLDS_F.internalTempF.ranges
   );
 
+  const todayTotalPages = Math.max(1, Math.ceil(todayAlerts.length / ALERTS_PAGE_SIZE));
+  const safeTodayPage = Math.min(Math.max(1, todayAlertsPage), todayTotalPages);
+  const todayAlertsSlice = todayAlerts.slice(
+    (safeTodayPage - 1) * ALERTS_PAGE_SIZE,
+    safeTodayPage * ALERTS_PAGE_SIZE
+  );
+
   return (
     <div className="page">
       <header className="pageHead">
@@ -338,9 +434,9 @@ export default function HomeScreen() {
         className="thresholdTip"
         aria-label="How humidity and temperature bands are interpreted"
       >
-        Humidity bands follow common in-hive targets (~50–60% RH is often cited; &gt;75% can
-        increase condensation risk). Temperature bands use typical brood-area readings (~93–95°F)
-        as a reference — sensor placement and season change what you see.
+        Humidity is usually healthiest around 50–60% RH, while sustained high humidity can raise
+        condensation risk. Temperature guidance is based on typical brood-area ranges (~93–95°F),
+        but readings will vary by season and sensor placement.
       </aside>
 
       <section className="pageSection" aria-labelledby="hardware-heading">
@@ -351,9 +447,12 @@ export default function HomeScreen() {
             <span className="hardwareInfoValue">{readings.connectionStatus}</span>
           </div>
           <div className="hardwareInfoCard" aria-label="Package loss">
-            <span className="hardwareInfoLabel">Package loss</span>
+            <span className="hardwareInfoLabel">Packet loss (30d active sessions)</span>
             <span className="hardwareInfoValue">
-              {readings.packageLoss != null ? readings.packageLoss : "—"}
+              {readings.packageLoss != null ? `${readings.packageLoss}%` : "—"}
+            </span>
+            <span className="hardwareInfoLabel">
+              Excludes long offline/unhooked gaps (&gt;2h)
             </span>
           </div>
         </div>
@@ -364,17 +463,11 @@ export default function HomeScreen() {
         <div className="chartFrame">
           <AccessibleLineChart
             title="Inside vs outside temperature (last 24 hours)"
-            data={chartData.map((p, i) => {
-              const externalF =
-                externalTempByHour != null && externalTempByHour[p.t] != null
-                  ? externalTempByHour[p.t]
-                  : getSyntheticExternalTempF(p.internalTempF, i);
-              return {
-                xLabel: p.t,
-                internalTemp: p.internalTempF,
-                externalTemp: externalF,
-              };
-            })}
+            data={chartData.map((p) => ({
+              xLabel: p.xLabel ?? p.t,
+              internalTemp: p.internalTempF,
+              externalTemp: p.externalTempF ?? null,
+            }))}
             xLabelKey="xLabel"
             series={[
               { key: "internalTemp", name: "Inside hive (°F)" },
@@ -382,10 +475,11 @@ export default function HomeScreen() {
             ]}
           />
           <div className="chartCaption">
-            Time of day (24-hour clock).
-            {externalTempByHour != null
-              ? " Outside temperature from weather (Open-Meteo)."
-              : " Outside temperature estimated (no weather data for this date)."}
+            This chart shows the last 24 hours up to the most recent hive reading. If part of the
+            inside line is missing, we didn&apos;t receive data for that hour.{" "}
+            {chartHasWeather
+              ? "Outside temperature comes from Open-Meteo for Rochester, with a fallback estimate only when weather data is unavailable."
+              : "Outside temperature is estimated from inside because weather data is currently unavailable."}
           </div>
         </div>
       </section>
@@ -393,7 +487,7 @@ export default function HomeScreen() {
       <section className="pageSection" aria-labelledby="alerts-heading">
         <h2 id="alerts-heading" className="pageSectionTitle">Today&apos;s alerts</h2>
         <p className="pageSectionLead">
-          Readings from today (local time) that crossed humidity or temperature thresholds.
+          These are today&apos;s threshold alerts based on your local time.
         </p>
         <div className="stack">
           {todayAlerts.length === 0 ? (
@@ -401,7 +495,7 @@ export default function HomeScreen() {
               No threshold alerts yet today — hive looks healthy
             </div>
           ) : (
-            todayAlerts.map((a) => (
+            todayAlertsSlice.map((a) => (
               <AlertCard
                 key={a.id}
                 type={a.type}
@@ -412,6 +506,31 @@ export default function HomeScreen() {
             ))
           )}
         </div>
+        {todayAlerts.length > ALERTS_PAGE_SIZE ? (
+          <nav className="paginationBar" aria-label="Today's alerts pages">
+            <button
+              type="button"
+              className="exportBtn"
+              disabled={safeTodayPage <= 1}
+              onClick={() => setTodayAlertsPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </button>
+            <span className="paginationInfo">
+              Page {safeTodayPage} of {todayTotalPages}
+            </span>
+            <button
+              type="button"
+              className="exportBtn"
+              disabled={safeTodayPage >= todayTotalPages}
+              onClick={() =>
+                setTodayAlertsPage((p) => Math.min(todayTotalPages, p + 1))
+              }
+            >
+              Next
+            </button>
+          </nav>
+        ) : null}
       </section>
     </div>
   );
