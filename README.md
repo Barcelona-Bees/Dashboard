@@ -307,15 +307,6 @@ HIVE_PASSKEY=<matches hive passkey>
 
 ---
 
-## Final project notes (recommended for submission)
-
-- Keep `.env` out of git and provide `.env.example` only.
-- Include screenshots/GIFs of Home, Alerts, Data, and export flow in your final report.
-- Document your deployment host, uptime checks, and recovery steps.
-- If demonstrating live ingestion, run `npm run demo:push -- --loop` during presentation.
-
----
-
 ## Next steps (roadmap)
 
 Planned production-oriented enhancements:
