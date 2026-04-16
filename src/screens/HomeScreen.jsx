@@ -456,7 +456,7 @@ export default function HomeScreen() {
               {readings.packageLoss != null ? `${readings.packageLoss}%` : "—"}
             </span>
             <span className="hardwareInfoLabel">
-              Excludes long offline/unhooked gaps (&gt;2h)
+              Excludes long offline/unhooked gaps (&gt;30m)
             </span>
           </div>
         </div>
