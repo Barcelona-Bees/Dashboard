@@ -91,9 +91,9 @@ export async function exportXlsx(payload, filename) {
 }
 
 /**
- * Opens a printable HTML table; user chooses Print → Save as PDF in the browser.
+ * Builds printable HTML for table export.
  */
-export function openPrintableTable(payload, title) {
+function buildPrintableHtml(payload, title) {
   const { rows, columns } = payload;
   const thead = `<tr>${columns.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr>`;
   const tbody = rows
@@ -102,7 +102,7 @@ export function openPrintableTable(payload, title) {
         `<tr>${columns.map((c) => `<td>${escapeHtml(r[c] == null ? "" : String(r[c]))}</td>`).join("")}</tr>`
     )
     .join("");
-  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>${escapeHtml(
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>${escapeHtml(
     title
   )}</title><style>
     body { font-family: system-ui, sans-serif; margin: 24px; color: #1e293b; }
@@ -115,10 +115,63 @@ export function openPrintableTable(payload, title) {
     <h1>${escapeHtml(title)}</h1>
     <table><thead>${thead}</thead><tbody>${tbody}</tbody></table>
     <p class="hint">Use your browser’s Print dialog, then choose <strong>Save as PDF</strong>.</p>
-    <p class="hint"><button type="button" onclick="window.print()">Print / Save as PDF</button></p>
   </body></html>`;
+}
 
-  const w = window.open("", "_blank", "noopener,noreferrer");
+/**
+ * Opens print flow without a popup when possible; user chooses Print -> Save as PDF.
+ */
+export function openPrintableTable(payload, title) {
+  const html = buildPrintableHtml(payload, title);
+
+  // Primary path: hidden iframe in current tab (avoids popup blockers).
+  try {
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.setAttribute("aria-hidden", "true");
+    document.body.appendChild(iframe);
+
+    iframe.onload = () => {
+      const w = iframe.contentWindow;
+      if (!w) {
+        iframe.remove();
+        return;
+      }
+
+      const cleanup = () => {
+        window.removeEventListener("focus", onFocusBack);
+        setTimeout(() => {
+          if (iframe.parentNode) iframe.remove();
+        }, 300);
+      };
+      const onFocusBack = () => cleanup();
+      window.addEventListener("focus", onFocusBack, { once: true });
+
+      w.focus();
+      w.print();
+      // Fallback cleanup if focus event never fires.
+      setTimeout(cleanup, 15_000);
+    };
+
+    const doc = iframe.contentDocument;
+    if (!doc) {
+      iframe.remove();
+      return false;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+    return true;
+  } catch {
+    // Fallback: open a new tab if iframe printing fails.
+  }
+
+  const w = window.open("", "_blank");
   if (!w) return false;
   w.document.write(html);
   w.document.close();

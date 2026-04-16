@@ -204,7 +204,7 @@ export function ExportModal({ rows, onClose }) {
           break;
         case "pdf":
           if (!openPrintableTable(payload, "Barcelona Bees — readings export")) {
-            setErr("Pop-up blocked. Allow pop-ups for this site to print / save as PDF.");
+            setErr("Could not open print view. Check browser print permissions and try again.");
             setBusy(false);
             return;
           }
