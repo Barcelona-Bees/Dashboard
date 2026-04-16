@@ -14,6 +14,38 @@ export const ALERT_HISTORY_DAYS = 30;
 /** Page size for paginated alert lists (Home “today”, Notifications history). */
 export const ALERTS_PAGE_SIZE = 15;
 
+/** Shared alert list filters for notifications-style views. */
+export const ALERT_FILTER_OPTIONS = [
+  { value: "all", label: "All notifications" },
+  { value: "critical", label: "Critical only" },
+  { value: "warning", label: "Warnings only" },
+  { value: "connectivity", label: "Connectivity" },
+  { value: "temperature", label: "Temperature" },
+  { value: "humidity", label: "Humidity" },
+];
+
+/**
+ * Filter alerts by high-level notification category.
+ * @param {Array<{ severity?: string, type?: string }>} alerts
+ * @param {string} filterValue
+ */
+export function filterAlertsByNotification(alerts, filterValue) {
+  if (!Array.isArray(alerts) || alerts.length === 0) return [];
+  if (!filterValue || filterValue === "all") return alerts;
+
+  return alerts.filter((a) => {
+    const severity = String(a?.severity ?? "").toLowerCase();
+    const type = String(a?.type ?? "").toUpperCase();
+
+    if (filterValue === "critical") return severity === "critical";
+    if (filterValue === "warning") return severity === "warning";
+    if (filterValue === "connectivity") return type === "HIVE_STATUS";
+    if (filterValue === "temperature") return type === "HIVE_TEMP";
+    if (filterValue === "humidity") return type === "HUMIDITY";
+    return true;
+  });
+}
+
 function formatAlertTime(date) {
   return date.toLocaleString(undefined, {
     month: "short",

@@ -648,6 +648,40 @@ button, input, select { font: inherit; }
   font-variant-numeric: tabular-nums;
 }
 .stack { display: flex; flex-direction: column; gap: var(--space-3); }
+.alertFilters {
+  margin: 0 0 var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.alertFiltersLabel {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.alertFilterSelect {
+  border: 1px solid var(--border-muted);
+  background: var(--surface-main);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  padding: 8px 12px;
+  min-height: 40px;
+}
+@media (max-width: 420px) {
+  .alertFilters {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+  .alertFiltersLabel {
+    width: 100%;
+    text-align: center;
+  }
+  .alertFilterSelect {
+    width: 100%;
+  }
+}
 
 .statusBtn {
   margin-top: 16px; width: 100%; border: none; border-radius: var(--radius-lg);
@@ -766,11 +800,32 @@ button, input, select { font: inherit; }
   margin-top: var(--space-5);
   flex-wrap: wrap;
 }
+.paginationBar .exportBtn {
+  min-height: 44px;
+}
 .paginationBar .paginationInfo {
   font-size: 0.8125rem;
   color: var(--text-muted);
   min-width: 7rem;
   text-align: center;
+}
+@media (max-width: 420px) {
+  .paginationBar {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+    align-items: stretch;
+  }
+  .paginationBar .paginationInfo {
+    grid-column: 1 / -1;
+    order: -1;
+    min-width: 0;
+  }
+  .paginationBar .exportBtn {
+    width: 100%;
+    padding: 10px 8px;
+  }
 }
 
 .modalWrap {

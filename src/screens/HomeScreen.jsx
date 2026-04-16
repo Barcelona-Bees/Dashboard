@@ -12,8 +12,10 @@ import {
 } from "../services/api";
 import {
   ALERTS_PAGE_SIZE,
+  ALERT_FILTER_OPTIONS,
   collectAlertsFromPoints,
   collectConnectivityGapAlerts,
+  filterAlertsByNotification,
   filterPointsInLocalCalendarDay,
 } from "../services/alerts";
 import {
@@ -107,6 +109,7 @@ export default function HomeScreen() {
   const [empty, setEmpty] = useState(initialSnap?.empty ?? false);
   const [todayAlerts, setTodayAlerts] = useState(initialSnap?.todayAlerts ?? []);
   const [todayAlertsPage, setTodayAlertsPage] = useState(1);
+  const [todayNotificationFilter, setTodayNotificationFilter] = useState("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -368,9 +371,10 @@ export default function HomeScreen() {
     THRESHOLDS_F.internalTempF.ranges
   );
 
-  const todayTotalPages = Math.max(1, Math.ceil(todayAlerts.length / ALERTS_PAGE_SIZE));
+  const filteredTodayAlerts = filterAlertsByNotification(todayAlerts, todayNotificationFilter);
+  const todayTotalPages = Math.max(1, Math.ceil(filteredTodayAlerts.length / ALERTS_PAGE_SIZE));
   const safeTodayPage = Math.min(Math.max(1, todayAlertsPage), todayTotalPages);
-  const todayAlertsSlice = todayAlerts.slice(
+  const todayAlertsSlice = filteredTodayAlerts.slice(
     (safeTodayPage - 1) * ALERTS_PAGE_SIZE,
     safeTodayPage * ALERTS_PAGE_SIZE
   );
@@ -489,10 +493,32 @@ export default function HomeScreen() {
         <p className="pageSectionLead">
           These are today&apos;s threshold alerts based on your local time.
         </p>
+        <div className="alertFilters">
+          <label htmlFor="home-alerts-filter-select" className="alertFiltersLabel">
+            Filter notifications
+          </label>
+          <select
+            id="home-alerts-filter-select"
+            className="alertFilterSelect"
+            value={todayNotificationFilter}
+            onChange={(e) => {
+              setTodayNotificationFilter(e.target.value);
+              setTodayAlertsPage(1);
+            }}
+          >
+            {ALERT_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="stack">
-          {todayAlerts.length === 0 ? (
+          {filteredTodayAlerts.length === 0 ? (
             <div className="emptyState">
-              No threshold alerts yet today — hive looks healthy
+              {todayAlerts.length === 0
+                ? "No threshold alerts yet today — hive looks healthy"
+                : "No notifications match this filter."}
             </div>
           ) : (
             todayAlertsSlice.map((a) => (
@@ -506,7 +532,7 @@ export default function HomeScreen() {
             ))
           )}
         </div>
-        {todayAlerts.length > ALERTS_PAGE_SIZE ? (
+        {filteredTodayAlerts.length > ALERTS_PAGE_SIZE ? (
           <nav className="paginationBar" aria-label="Today's alerts pages">
             <button
               type="button"

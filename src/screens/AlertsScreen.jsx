@@ -8,6 +8,8 @@ import {
   collectConnectivityGapAlerts,
   ALERT_HISTORY_DAYS,
   ALERTS_PAGE_SIZE,
+  ALERT_FILTER_OPTIONS,
+  filterAlertsByNotification,
 } from "../services/alerts";
 import { formatTimestamp } from "../utils/conversions";
 import { loadAlertsSnapshot, saveAlertsSnapshot } from "../services/alertsCache";
@@ -29,6 +31,7 @@ export default function AlertsScreen() {
     Boolean(initialSnap?.empty) && hasCachedHistory
   );
   const [page, setPage] = useState(1);
+  const [notificationFilter, setNotificationFilter] = useState("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -136,9 +139,10 @@ export default function AlertsScreen() {
     );
   }
 
-  const totalPages = Math.max(1, Math.ceil(historicalAlerts.length / ALERTS_PAGE_SIZE));
-  const safePage = Math.min(Math.max(1, page), totalPages);
-  const pageSlice = historicalAlerts.slice(
+  const filteredAlerts = filterAlertsByNotification(historicalAlerts, notificationFilter);
+  const filteredTotalPages = Math.max(1, Math.ceil(filteredAlerts.length / ALERTS_PAGE_SIZE));
+  const safePage = Math.min(Math.max(1, page), filteredTotalPages);
+  const pageSlice = filteredAlerts.slice(
     (safePage - 1) * ALERTS_PAGE_SIZE,
     safePage * ALERTS_PAGE_SIZE
   );
@@ -154,11 +158,32 @@ export default function AlertsScreen() {
 
       <div className="panelHistory">
         <h2 className="panelHistoryTitle">Alert history</h2>
+        <div className="alertFilters">
+          <label htmlFor="alerts-filter-select" className="alertFiltersLabel">
+            Filter notifications
+          </label>
+          <select
+            id="alerts-filter-select"
+            className="alertFilterSelect"
+            value={notificationFilter}
+            onChange={(e) => {
+              setNotificationFilter(e.target.value);
+              setPage(1);
+            }}
+          >
+            {ALERT_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="stack">
-          {historicalAlerts.length === 0 ? (
+          {filteredAlerts.length === 0 ? (
             <div className="emptyState">
-              No threshold alerts in the last {ALERT_HISTORY_DAYS} days — hive looks
-              healthy
+              {historicalAlerts.length === 0
+                ? `No threshold alerts in the last ${ALERT_HISTORY_DAYS} days — hive looks healthy`
+                : "No notifications match this filter."}
             </div>
           ) : (
             pageSlice.map((a) => (
@@ -173,7 +198,7 @@ export default function AlertsScreen() {
           )}
         </div>
 
-        {historicalAlerts.length > ALERTS_PAGE_SIZE ? (
+        {filteredAlerts.length > ALERTS_PAGE_SIZE ? (
           <nav className="paginationBar" aria-label="Alert history pages">
             <button
               type="button"
@@ -184,13 +209,13 @@ export default function AlertsScreen() {
               Previous
             </button>
             <span className="paginationInfo">
-              Page {safePage} of {totalPages}
+              Page {safePage} of {filteredTotalPages}
             </span>
             <button
               type="button"
               className="exportBtn"
-              disabled={safePage >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage >= filteredTotalPages}
+              onClick={() => setPage((p) => Math.min(filteredTotalPages, p + 1))}
             >
               Next
             </button>
