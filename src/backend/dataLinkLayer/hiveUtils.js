@@ -3,7 +3,7 @@ import * as dbutils from "./dbutils.js";
 /**
  * Returns the starttime for the given hiveID
  * 
- * @param {*} hiveID 
+ * @param {*} hiveID
  * @returns the startime
  */
 async function getStartTime(hiveID){
@@ -13,8 +13,6 @@ async function getStartTime(hiveID){
     }
     return data.rows[0];
 }
-
-// getStartTime(1)
 
 /**
  * Tests the given passkey and returns the hiveID if valid or -1 if invalid

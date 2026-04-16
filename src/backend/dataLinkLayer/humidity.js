@@ -1,9 +1,4 @@
 import * as dbutils from "./dbutils.js";
-/**
- * The humidity DLL
- * 
- */
-
 
 /**
  * Inserts a Humidity reading
@@ -80,7 +75,6 @@ async function getCustomRangeHumidity(hiveID, startDate, endDate){
 async function getHumidityMeasurement(hiveID, timestamp, measurement = 'day') {
     const sql =
         "SELECT timestamp, reading FROM humidity WHERE hiveID = $1 AND DATE_TRUNC($2,timestamp) = TO_TIMESTAMP($3)";
-        // console.log(timestamp);
     return await dbutils.runDirectSQLwithPrepared(sql, [hiveID, measurement, timestamp]);
 }
 
